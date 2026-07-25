@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Nerts — Play vs Bots</title>
+<style>
+  :root{
+    --felt:#0f5132; --felt2:#0b3d27; --gold:#f4c430;
+    --card-w:52px; --card-h:74px; --radius:8px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  body{background:radial-gradient(circle at 50% 12%,var(--felt) 0%,var(--felt2) 72%);color:#fff;overflow:hidden;user-select:none;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;}
+  .btn{background:var(--gold);color:#3a2c00;padding:10px 16px;font-size:15px;box-shadow:0 2px 0 #b8901d;}
+  .btn:active{transform:translateY(1px);box-shadow:0 1px 0 #b8901d;}
+  .btn.ghost{background:rgba(255,255,255,.15);color:#fff;box-shadow:none;border:1px solid rgba(255,255,255,.35);}
+  .btn.red{background:#e63946;color:#fff;box-shadow:0 2px 0 #a51b26;}
+  .hidden{display:none !important;}
+  /* iOS Safari fires tap->click on non-button elements only when they're marked clickable */
+  .chip,.card,.slot,.workpile,.iconbtn,.closex,.opp,.btn,.stackwrap{cursor:pointer;touch-action:manipulation;}
+
+  .screen{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;z-index:20;overflow:auto;}
+  .panel{background:rgba(0,0,0,.35);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.15);
+    border-radius:18px;padding:22px 20px;width:100%;max-width:420px;box-shadow:0 12px 40px rgba(0,0,0,.35);}
+  .panel h1{margin:0 0 2px;font-size:30px;text-align:center;}
+  .panel h1 span{color:var(--gold);}
+  .panel .sub{text-align:center;opacity:.8;margin:0 0 16px;font-size:14px;}
+  label{display:block;font-size:13px;opacity:.85;margin:14px 0 5px;font-weight:600;}
+  input{width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.95);color:#111;font-size:16px;font-weight:600;}
+  .chips{display:flex;gap:8px;}
+  .chips .chip{flex:1;text-align:center;padding:11px 4px;border-radius:10px;font-weight:800;font-size:14px;background:rgba(255,255,255,.12);border:2px solid transparent;}
+  .chips .chip.on{border-color:#fff;transform:scale(1.03);}
+
+  /* Board */
+  #game{position:absolute;inset:0;display:flex;flex-direction:column;}
+  .topbar{display:flex;align-items:center;gap:8px;padding:7px 10px;background:rgba(0,0,0,.28);}
+  .topbar b{color:var(--gold);}
+  .topbar .spacer{flex:1;}
+  .iconbtn{background:rgba(255,255,255,.15);color:#fff;border-radius:10px;padding:7px 11px;font-size:13px;font-weight:700;}
+  .oppbar{display:flex;gap:6px;flex-wrap:wrap;padding:5px 8px;background:rgba(0,0,0,.15);font-size:12px;}
+  .opp{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.08);border-radius:20px;padding:3px 9px;}
+  .opp .n{font-weight:700;}
+  .opp .nz{background:#000;border-radius:10px;padding:0 6px;font-weight:800;font-size:11px;}
+
+  .board{flex:1;overflow:auto;padding:6px 8px 12px;}
+  .zone-label{font-size:11px;text-transform:uppercase;letter-spacing:1px;opacity:.55;margin:4px 4px 4px;}
+  .foundations{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;padding:6px;background:rgba(0,0,0,.18);border-radius:12px;margin-bottom:8px;min-height:86px;}
+  .slot{width:var(--card-w);height:var(--card-h);border-radius:var(--radius);}
+  .slot.empty{border:2px dashed rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:18px;opacity:.5;}
+  .slot.empty.target{border-color:var(--gold);opacity:1;box-shadow:0 0 0 3px rgba(244,196,48,.4);}
+
+  .myarea{display:flex;gap:6px;align-items:flex-start;justify-content:center;flex-wrap:wrap;}
+  .pilecol{display:flex;flex-direction:column;align-items:center;gap:3px;}
+  .pilecol .cap{font-size:10px;opacity:.7;text-transform:uppercase;}
+  .workpile{width:var(--card-w);min-height:var(--card-h);position:relative;border-radius:var(--radius);}
+  .workpile.empty{border:2px dashed rgba(255,255,255,.25);height:var(--card-h);}
+  .workpile.target{box-shadow:0 0 0 3px rgba(244,196,48,.5);}
+  .stackwrap{position:relative;}
+
+  .card{width:var(--card-w);height:var(--card-h);border-radius:var(--radius);background:#fff;color:#111;position:relative;
+    box-shadow:0 1px 3px rgba(0,0,0,.4);display:flex;flex-direction:column;justify-content:space-between;padding:3px 4px;font-weight:800;border:1px solid #d9d9d9;}
+  .card.red{color:#d61f2b;}
+  .card .tl{font-size:14px;line-height:1;}
+  .card .br{font-size:14px;line-height:1;align-self:flex-end;transform:rotate(180deg);}
+  .card .pip{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:24px;opacity:.9;}
+  .card.back{background:repeating-linear-gradient(45deg,#1e5aa8,#1e5aa8 6px,#2f74d0 6px,#2f74d0 12px);border:1px solid #14417a;}
+  .card.sel{outline:3px solid var(--gold);outline-offset:1px;transform:translateY(-6px);z-index:5;}
+  .fan{position:absolute;left:0;width:var(--card-w);}
+  .pilecount{position:absolute;bottom:-2px;right:-2px;background:#000;color:#fff;border-radius:10px;font-size:11px;padding:0 5px;font-weight:800;}
+
+  .controls{display:flex;gap:8px;justify-content:center;padding:8px;background:rgba(0,0,0,.22);}
+  .hint{text-align:center;font-size:12px;opacity:.75;padding:3px 8px;}
+
+  .drawer{position:absolute;top:0;bottom:0;right:0;width:min(320px,86vw);background:var(--felt2);box-shadow:-8px 0 30px rgba(0,0,0,.35);z-index:30;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .22s;}
+  .drawer.open{transform:translateX(0);}
+  .dhead{display:flex;align-items:center;padding:12px 14px;background:rgba(0,0,0,.25);font-weight:800;}
+  .dhead .spacer{flex:1;}
+  .closex{background:none;color:#fff;font-size:22px;padding:0 6px;}
+  .scorelist{padding:12px;overflow:auto;flex:1;}
+  .teamcard{background:rgba(255,255,255,.08);border-radius:12px;padding:12px;margin-bottom:10px;border-left:5px solid var(--tc,#fff);}
+  .teamcard h3{margin:0 0 4px;font-size:16px;}
+  .teamcard .score{font-size:28px;font-weight:900;color:var(--gold);}
+  .bar{height:8px;background:rgba(255,255,255,.15);border-radius:6px;overflow:hidden;margin-top:8px;}
+  .bar>i{display:block;height:100%;background:var(--gold);}
+
+  .toast{position:absolute;top:64px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);padding:9px 16px;border-radius:24px;font-weight:700;z-index:40;opacity:0;transition:opacity .25s;pointer-events:none;max-width:88vw;text-align:center;font-size:14px;}
+  .toast.show{opacity:1;}
+  .overlay{position:absolute;inset:0;background:rgba(0,0,0,.78);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .big{font-size:38px;font-weight:900;color:var(--gold);margin:6px 0;}
+
+  @media(min-width:520px){:root{--card-w:60px;--card-h:86px;}}
+</style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div id="setup" class="screen">
+  <div class="panel">
+    <h1>Nerts <span>Solo</span></h1>
+    <p class="sub">Real-time card racing vs the computer 🤖</p>
+    <label>Your name</label>
+    <input id="nameInput" maxlength="14" placeholder="You">
+    <label>How many bots?</label>
+    <div class="chips" id="botCount">
+      <div class="chip on" data-n="1">1</div>
+      <div class="chip" data-n="2">2</div>
+      <div class="chip" data-n="3">3</div>
+    </div>
+    <label>Difficulty</label>
+    <div class="chips" id="diff">
+      <div class="chip on" data-d="easy">🙂 Easy</div>
+      <div class="chip" data-d="med">😎 Medium</div>
+      <div class="chip" data-d="hard">🔥 Hard</div>
+    </div>
+    <label>Play to</label>
+    <div class="chips" id="target">
+      <div class="chip" data-t="50">50</div>
+      <div class="chip on" data-t="100">100</div>
+      <div class="chip" data-t="150">150</div>
+    </div>
+    <button class="btn" id="startBtn" style="width:100%;margin-top:18px;">Deal & Play ▶</button>
+    <a href="family.html" style="display:block;text-align:center;margin-top:16px;color:#f4c430;font-weight:700;text-decoration:none;font-size:14px;">👨‍👩‍👧 Play the live family game (online) →</a>
+  </div>
+</div>
+
+<!-- GAME -->
+<div id="game" class="hidden">
+  <div class="topbar">
+    <div>Nerts <b id="topName">You</b></div>
+    <div class="spacer"></div>
+    <button class="iconbtn" id="scoreOpen">🏆 <span id="topScore">0</span>/<span id="topTarget">100</span></button>
+    <button class="iconbtn" id="newBtn">↺ New</button>
+  </div>
+  <div class="oppbar" id="oppBar"></div>
+
+  <div class="board">
+    <div class="zone-label">Center foundations — build up A→K by suit (yours & the bots')</div>
+    <div class="foundations" id="foundations"></div>
+    <div class="zone-label">Your cards</div>
+    <div class="myarea">
+      <div class="pilecol"><div class="cap">Stock</div><div id="stockPile"></div></div>
+      <div class="pilecol"><div class="cap">Waste</div><div id="wastePile"></div></div>
+      <div class="pilecol" style="flex:1 1 auto;"><div class="cap">Work piles</div><div id="workRow" style="display:flex;gap:5px;"></div></div>
+      <div class="pilecol"><div class="cap">Nerts</div><div id="nertsPile"></div></div>
+    </div>
+  </div>
+
+  <div class="hint" id="turnHint">Tap the stock to flip • tap a card then tap where it goes • double-tap to auto-play up top</div>
+  <div class="controls">
+    <button class="btn ghost" id="flipBtn">🔄 Flip Stock</button>
+    <button class="btn red hidden" id="nertsBtn" style="font-size:18px;padding:12px 26px;">NERTS! 🎉</button>
+  </div>
+</div>
+
+<!-- Score drawer -->
+<div class="drawer" id="scoreDrawer">
+  <div class="dhead">🏆 Scoreboard <span style="opacity:.6;font-weight:600;margin-left:6px;font-size:13px;">to <span id="targetLabel">100</span></span><div class="spacer"></div><button class="closex" data-close="scoreDrawer">×</button></div>
+  <div class="scorelist" id="scoreList"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Overlay -->
+<div class="overlay hidden" id="overlay">
+  <div class="panel" style="text-align:center;">
+    <div id="ovTitle" style="font-size:20px;font-weight:800;"></div>
+    <div class="big" id="ovBig"></div>
+    <div id="ovBody" style="font-size:14px;opacity:.9;line-height:1.6;"></div>
+    <button class="btn" id="ovBtn" style="width:100%;margin-top:16px;"></button>
+    <div class="hint" id="ovHint" style="margin-top:6px;"></div>
+  </div>
+</div>
+
+<script>
+/* ============ Nerts Solo — 100% local, no network ============ */
+const $ = id => document.getElementById(id);
+const SUITS=["♠","♥","♦","♣"], RANKS=["","A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const isRed=s=>s===1||s===2;
+
+/* Robust tap binding: use Pointer events (work reliably on iOS/Android in-app
+   webviews where plain div "click" can be swallowed). Supports double-tap via a
+   global tracker so it survives the re-render between taps. */
+let _lastKey=null,_lastT=0;
+function bindTap(el, fn, opts){
+  opts=opts||{};
+  let down=false,moved=false,sx=0,sy=0;
+  const start=e=>{ down=true;moved=false; const p=e.touches?e.touches[0]:e; sx=p.clientX;sy=p.clientY; };
+  const move=e=>{ if(!down)return; const p=e.touches?e.touches[0]:e; if(Math.abs(p.clientX-sx)>12||Math.abs(p.clientY-sy)>12) moved=true; };
+  const end=e=>{ if(!down)return; down=false; if(moved)return;
+    if(opts.stop && e.stopPropagation) e.stopPropagation();
+    if(e.cancelable) e.preventDefault();
+    const now=Date.now();
+    if(opts.onDouble && _lastKey===opts.key && now-_lastT<340){ _lastKey=null; _lastT=0; opts.onDouble(e); return; }
+    _lastKey=opts.key||null; _lastT=now; fn(e); };
+  if(window.PointerEvent){
+    el.addEventListener('pointerdown',start); el.addEventListener('pointermove',move);
+    el.addEventListener('pointerup',end); el.addEventListener('pointercancel',()=>down=false);
+  } else {
+    el.addEventListener('touchstart',start,{passive:true}); el.addEventListener('touchmove',move,{passive:true});
+    el.addEventListener('touchend',end); el.addEventListener('click',e=>{ if(opts.stop)e.stopPropagation(); fn(e); });
+  }
+}
+
+const BOT_NAMES=['Botsy 🤖','Ace McBot','Nerty 🤖'];
+const BOT_DIFF={ easy:{min:1100,max:1700,unload:0.5}, med:{min:650,max:1000,unload:0.8}, hard:{min:300,max:520,unload:1} };
+const QUIPS=["beep boop, you're going down 🤖","too slow, human 😏","my circuits love this","is that your best move?","gg easy 💾","calculating your defeat…","01110111 = win"];
+
+let players=[];       // [{id,name,isBot,diff,hand,played,total,nertsCount,color}]
+let ME=null;
+let foundations=[];   // array of piles; each pile = [{r,s,by}]
+let SLOTS=12, TARGET=100, roundSeq=0, roundActive=false;
+let selection=null;   // {zone,pile,index,cards}
+let botTimer=null, botNext={};
+const COLORS=['#ffd43b','#74c0fc','#ff8787','#63e6be'];
+
+// setup chips
+function wireChips(sel,attr,cb){ document.querySelectorAll(sel+' .chip').forEach(c=>{ bindTap(c,()=>{ document.querySelectorAll(sel+' .chip').forEach(x=>x.classList.toggle('on',x===c)); cb(c.dataset[attr]); }); }); }
+let cfg={ bots:1, diff:'easy', target:100 };
+wireChips('#botCount','n',v=>cfg.bots=+v);
+wireChips('#diff','d',v=>cfg.diff=v);
+wireChips('#target','t',v=>cfg.target=+v);
+
+// deck / deal
+function freshDeck(){ const d=[]; for(let s=0;s<4;s++)for(let r=1;r<=13;r++)d.push({r,s});
+  for(let i=d.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [d[i],d[j]]=[d[j],d[i]]; } return d; }
+function dealHand(){ const d=freshDeck(); const nerts=d.splice(0,13);
+  const work=[[d.pop()],[d.pop()],[d.pop()],[d.pop()]]; return {nerts,work,stock:d,waste:[]}; }
+
+bindTap($('startBtn'),()=>{
+  const name=($('nameInput').value.trim()||'You');
+  TARGET=cfg.target;
+  players=[{id:'me',name,isBot:false,total:0,color:COLORS[0]}];
+  for(let i=0;i<cfg.bots;i++) players.push({id:'bot'+i,name:BOT_NAMES[i],isBot:true,diff:cfg.diff,total:0,color:COLORS[i+1]});
+  ME=players[0];
+  SLOTS=Math.max(8, players.length*4);
+  $('topName').textContent=name; $('topTarget').textContent=TARGET; $('targetLabel').textContent=TARGET;
+  $('setup').classList.add('hidden'); $('game').classList.remove('hidden');
+  startRound();
+  if(!botTimer) botTimer=setInterval(botTick,150);
+});
+
+function startRound(){
+  roundSeq++; roundActive=true;
+  foundations=Array.from({length:SLOTS},()=>null);
+  players.forEach(p=>{ p.hand=dealHand(); p.played=0; p.nertsCount=13; });
+  botNext={}; players.forEach(p=>{ if(p.isBot) botNext[p.id]=Date.now()+700+Math.random()*700; });
+  selection=null; $('nertsBtn').classList.add('hidden'); hideOverlay();
+  renderAll();
+}
+
+/* ---------- rendering ---------- */
+function cardEl(c,extra){ const el=document.createElement('div');
+  el.className='card'+(isRed(c.s)?' red':'')+(extra?' '+extra:'');
+  el.innerHTML=`<div class="tl">${RANKS[c.r]}<br>${SUITS[c.s]}</div><div class="pip">${SUITS[c.s]}</div><div class="br">${RANKS[c.r]}<br>${SUITS[c.s]}</div>`;
+  return el; }
+function backEl(count){ const el=document.createElement('div'); el.className='card back';
+  if(count>0){ const b=document.createElement('div'); b.className='pilecount'; b.textContent=count; el.appendChild(b); } return el; }
+function emptySlot(txt){ const e=document.createElement('div'); e.className='slot empty'; e.textContent=txt||''; return e; }
+
+function renderAll(){ renderOpp(); renderFoundations(); renderHand(); renderScore(); }
+
+function renderOpp(){ const bar=$('oppBar'); bar.innerHTML='';
+  players.filter(p=>p.isBot).forEach(p=>{ const d=document.createElement('div'); d.className='opp';
+    d.innerHTML=`<span class="n" style="color:${p.color}">${p.name}</span> <span class="nz">🂠 ${p.nertsCount}</span>`;
+    bar.appendChild(d); }); }
+
+function renderFoundations(){ const wrap=$('foundations'); wrap.innerHTML='';
+  foundations.forEach((pile,i)=>{ let el;
+    if(pile&&pile.length){ el=cardEl(pile[pile.length-1]); el.classList.add('slot'); }
+    else { el=emptySlot('A'); }
+    if(selection&&selection.cards.length===1&&canFound(selection.cards[0],pile)){ el.classList.add('target'); }
+    bindTap(el,()=>onFoundationTap(i),{key:'f'+i}); wrap.appendChild(el); }); }
+
+function renderHand(){ const h=ME.hand; if(!h) return;
+  const sp=$('stockPile'); sp.innerHTML=''; const sEl=h.stock.length?backEl(h.stock.length):emptySlot('↻'); bindTap(sEl,flipStock,{key:'stock'}); sp.appendChild(sEl);
+  const wp=$('wastePile'); wp.innerHTML='';
+  if(h.waste.length){ const el=cardEl(h.waste[h.waste.length-1]); if(isSel('waste',0,h.waste.length-1))el.classList.add('sel');
+    bindTap(el,()=>selectCard('waste',0,h.waste.length-1),{key:'waste',onDouble:()=>dblAuto('waste',0)}); wp.appendChild(el); }
+  else wp.appendChild(emptySlot(''));
+  const wr=$('workRow'); wr.innerHTML='';
+  h.work.forEach((pile,pi)=>{ const col=document.createElement('div'); col.className='workpile'+(pile.length?'':' empty');
+    if(selection&&canWork(selection.cards,pile)) col.classList.add('target');
+    const sw=document.createElement('div'); sw.className='stackwrap'; sw.style.height=(pile.length?(pile.length-1)*20+74:74)+'px';
+    pile.forEach((c,ci)=>{ const el=cardEl(c); el.classList.add('fan'); el.style.top=(ci*20)+'px';
+      if(isSel('work',pi,ci))el.classList.add('sel');
+      bindTap(el,()=>selectCard('work',pi,ci),{stop:true,key:'w'+pi+'_'+ci,onDouble:()=>dblAuto('work',pi,ci)}); sw.appendChild(el); });
+    col.appendChild(sw); bindTap(col,()=>onWorkTap(pi),{key:'col'+pi}); wr.appendChild(col); });
+  const np=$('nertsPile'); np.innerHTML='';
+  if(h.nerts.length){ const el=cardEl(h.nerts[h.nerts.length-1]); if(isSel('nerts',0,h.nerts.length-1))el.classList.add('sel');
+    const c=document.createElement('div'); c.className='pilecount'; c.textContent=h.nerts.length; el.appendChild(c);
+    bindTap(el,()=>selectCard('nerts',0,h.nerts.length-1),{key:'nerts',onDouble:()=>dblAuto('nerts',0)}); np.appendChild(el); }
+  else np.appendChild(emptySlot('✓')); }
+
+function renderScore(){ const list=$('scoreList'); list.innerHTML='';
+  [...players].sort((a,b)=>b.total-a.total).forEach(p=>{ const div=document.createElement('div'); div.className='teamcard'; div.style.setProperty('--tc',p.color);
+    const pct=Math.max(0,Math.min(100,p.total/TARGET*100));
+    div.innerHTML=`<h3 style="color:${p.color}">${p.name}${p.isBot?' 🤖':''}</h3><div class="score">${p.total}</div><div class="bar"><i style="width:${pct}%"></i></div>`;
+    list.appendChild(div); });
+  $('topScore').textContent=ME.total; }
+
+/* ---------- rules ---------- */
+function canFound(card,pile){ if(!pile||!pile.length) return card.r===1; const t=pile[pile.length-1]; return card.s===t.s&&card.r===t.r+1; }
+function canWork(cards,pile){ const c=cards[0]; if(!pile||!pile.length) return true; const t=pile[pile.length-1]; return c.r===t.r-1&&isRed(c.s)!==isRed(t.s); }
+function validRun(run){ for(let i=0;i<run.length-1;i++){ const a=run[i],b=run[i+1]; if(!(b.r===a.r-1&&isRed(a.s)!==isRed(b.s))) return false; } return true; }
+
+/* ---------- human interaction ---------- */
+function isSel(z,p,i){ return selection&&selection.zone===z&&selection.pile===p&&selection.index===i; }
+function selectCard(zone,pile,index){ const h=ME.hand; let cards;
+  if(zone==='nerts') cards=[h.nerts[h.nerts.length-1]];
+  else if(zone==='waste') cards=[h.waste[h.waste.length-1]];
+  else { const p=h.work[pile]; const run=p.slice(index);
+    if(run.length>1&&!validRun(run)){ if(index!==p.length-1){ toast("Not a movable run"); return; } } cards=run; }
+  selection=isSel(zone,pile,index)?null:{zone,pile,index,cards}; renderFoundations(); renderHand(); }
+
+function onFoundationTap(i){ if(!selection) return; if(selection.cards.length!==1){ toast("Only single cards go up top"); return; }
+  const card=selection.cards[0]; if(!canFound(card,foundations[i])){ toast("Can't play there"); return; }
+  removeFromHand(ME,selection); foundations[i]=(foundations[i]||[]); foundations[i].push({r:card.r,s:card.s,by:ME.id});
+  ME.played++; ME.nertsCount=ME.hand.nerts.length; selection=null; renderAll(); checkOut(ME); }
+
+function onWorkTap(pi){ if(!selection) return; const pile=ME.hand.work[pi];
+  if(selection.zone==='work'&&selection.pile===pi){ selection=null; renderHand(); renderFoundations(); return; }
+  if(!canWork(selection.cards,pile)){ toast("Can't stack there"); return; }
+  const cards=selection.cards.slice(); removeFromHand(ME,selection); ME.hand.work[pi]=ME.hand.work[pi].concat(cards);
+  ME.nertsCount=ME.hand.nerts.length; selection=null; renderAll(); checkOut(ME); }
+
+function dblAuto(zone,pile,index){ const h=ME.hand; let card;
+  if(zone==='nerts') card=h.nerts[h.nerts.length-1];
+  else if(zone==='waste') card=h.waste[h.waste.length-1];
+  else { const p=h.work[pile]; if(index!==p.length-1) return; card=p[p.length-1]; }
+  let slot=-1;
+  for(let i=0;i<SLOTS;i++){ const pl=foundations[i]; if(pl&&pl.length&&canFound(card,pl)){slot=i;break;} }
+  if(slot<0&&card.r===1){ for(let i=0;i<SLOTS;i++){ if(!foundations[i]||!foundations[i].length){slot=i;break;} } }
+  if(slot<0){ toast("No spot up top for that"); return; }
+  selection={zone,pile,index,cards:[card]}; onFoundationTap(slot); }
+
+function removeFromHand(p,sel){ if(sel.zone==='nerts') p.hand.nerts.pop(); else if(sel.zone==='waste') p.hand.waste.pop(); else p.hand.work[sel.pile].splice(sel.index); }
+
+function flipStock(){ const h=ME.hand; if(!h.stock.length&&!h.waste.length) return;
+  if(!h.stock.length){ h.stock=h.waste.reverse(); h.waste=[]; } else { const n=Math.min(3,h.stock.length); for(let i=0;i<n;i++) h.waste.push(h.stock.pop()); }
+  selection=null; renderHand(); }
+bindTap($('flipBtn'),flipStock,{key:'flip'});
+
+/* ---------- bots ---------- */
+function botTick(){ if(!roundActive) return; const now=Date.now();
+  players.forEach(p=>{ if(!p.isBot) return; if(now<(botNext[p.id]||0)) return;
+    const diff=BOT_DIFF[p.diff]||BOT_DIFF.easy; const acted=botMove(p,diff);
+    const gap=diff.min+Math.random()*(diff.max-diff.min); botNext[p.id]=now+(acted?gap:gap*0.6);
+    if(acted&&Math.random()<0.02) toast(p.name+": "+QUIPS[Math.floor(Math.random()*QUIPS.length)]); }); }
+
+function botMove(p,diff){ const h=p.hand; if(!h) return false; const top=a=>a[a.length-1];
+  if(h.nerts.length){ const c=top(h.nerts); const s=foundSlot(c); if(s>=0) return botFound(p,'nerts',c,s,-1); }
+  for(let i=0;i<4;i++){ const w=h.work[i]; if(w.length){ const c=top(w); const s=foundSlot(c); if(s>=0) return botFound(p,'work',c,s,i); } }
+  if(h.waste.length){ const c=top(h.waste); const s=foundSlot(c); if(s>=0) return botFound(p,'waste',c,s,-1); }
+  if(h.nerts.length&&Math.random()<diff.unload){ const c=top(h.nerts); const wi=workTarget(h,c,true); if(wi>=0){ h.work[wi].push(h.nerts.pop()); afterBot(p); return true; } }
+  if(h.waste.length){ const c=top(h.waste); const wi=workTarget(h,c,false); if(wi>=0){ h.work[wi].push(h.waste.pop()); afterBot(p); return true; } }
+  if(h.stock.length){ const n=Math.min(3,h.stock.length); for(let k=0;k<n;k++) h.waste.push(h.stock.pop()); return true; }
+  if(h.waste.length){ h.stock=h.waste.reverse(); h.waste=[]; return true; }
+  return false; }
+function foundSlot(card){ for(let i=0;i<SLOTS;i++){ const p=foundations[i]; if(p&&p.length&&p[p.length-1].s===card.s&&p[p.length-1].r===card.r-1) return i; }
+  if(card.r===1){ for(let i=0;i<SLOTS;i++){ if(!foundations[i]||!foundations[i].length) return i; } } return -1; }
+function workTarget(h,card,allowEmpty){ for(let i=0;i<4;i++){ const p=h.work[i]; if(p.length){ const t=p[p.length-1]; if(card.r===t.r-1&&isRed(card.s)!==isRed(t.s)) return i; } }
+  if(allowEmpty){ for(let i=0;i<4;i++){ if(!h.work[i].length) return i; } } return -1; }
+function botFound(p,zone,card,slot,wi){ foundations[slot]=(foundations[slot]||[]); foundations[slot].push({r:card.r,s:card.s,by:p.id});
+  if(zone==='nerts') p.hand.nerts.pop(); else if(zone==='waste') p.hand.waste.pop(); else p.hand.work[wi].pop();
+  p.played++; afterBot(p); return true; }
+function afterBot(p){ p.nertsCount=p.hand.nerts.length; renderOpp(); renderFoundations();
+  if(!selection) renderHand(); checkOut(p); }
+
+/* ---------- round end ---------- */
+function checkOut(p){ if(p.hand.nerts.length===0 && roundActive){ endRound(p); } }
+function endRound(caller){ roundActive=false; selection=null;
+  players.forEach(p=>{ const round=(p.played||0)-2*p.hand.nerts.length; p.lastRound=round; p.total+=round; });
+  renderScore(); renderOpp();
+  const winner=players.find(p=>p.total>=TARGET);
+  let body='';
+  [...players].sort((a,b)=>b.total-a.total).forEach(p=>{ const s=p.lastRound>=0?'+':'';
+    body+=`<div style="margin:5px 0;"><span style="color:${p.color}">●</span> <b>${p.name}${p.isBot?' 🤖':''}</b>: ${p.total} <span style="opacity:.7">(${s}${p.lastRound})</span></div>`; });
+  if(winner){ $('ovTitle').textContent='🏆 Game Over'; $('ovBig').textContent=(winner.id==='me'?'You win! 🎉':winner.name+' wins');
+    $('ovBody').innerHTML=body; $('ovBtn').textContent='Play Again'; ovAction=()=>{ players.forEach(p=>p.total=0); startRound(); }; $('ovHint').textContent=''; }
+  else { $('ovTitle').textContent=(caller.id==='me'?'You went out! 🎉':caller.name+' went out!'); $('ovBig').textContent='Round Over';
+    $('ovBody').innerHTML=body; $('ovBtn').textContent='Next Round ▶'; ovAction=startRound;
+    $('ovHint').textContent='Cards played to the center = +1 each. Cards left in your Nerts pile = −2 each.'; }
+  showOverlay(); }
+
+/* button bindings (pointer-based so they work in in-app viewers) */
+let ovAction=null;
+bindTap($('ovBtn'),()=>{ if(ovAction) ovAction(); },{key:'ovbtn'});
+bindTap($('nertsBtn'),()=>{ if(ME&&ME.hand.nerts.length===0) endRound(ME); },{key:'nertsbtn'});
+bindTap($('newBtn'),()=>{ $('game').classList.add('hidden'); $('setup').classList.remove('hidden'); clearInterval(botTimer); botTimer=null; },{key:'newbtn'});
+
+/* ---------- drawers / toast / overlay ---------- */
+bindTap($('scoreOpen'),()=>$('scoreDrawer').classList.add('open'),{key:'scoreopen'});
+document.querySelectorAll('.closex').forEach(b=>bindTap(b,()=>$(b.dataset.close).classList.remove('open')));
+let toastT=null; function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),1500); }
+function showOverlay(){ $('overlay').classList.remove('hidden'); } function hideOverlay(){ $('overlay').classList.add('hidden'); }
+</script>
+</body>
+</html>

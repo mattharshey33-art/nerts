@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Family Nerts — Live</title>
+<style>
+  :root{
+    --felt:#0f5132; --felt2:#0b3d27; --gold:#f4c430; --ink:#12331f;
+    --panel:#ffffff; --shadow:rgba(0,0,0,.35);
+    --card-w:58px; --card-h:82px; --radius:9px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  body{
+    background:radial-gradient(circle at 50% 15%,var(--felt) 0%,var(--felt2) 70%);
+    color:#fff; overflow:hidden; user-select:none;
+  }
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;}
+  .btn{background:var(--gold);color:#3a2c00;padding:10px 16px;font-size:15px;box-shadow:0 2px 0 #b8901d;}
+  .btn:active{transform:translateY(1px);box-shadow:0 1px 0 #b8901d;}
+  .btn.ghost{background:rgba(255,255,255,.15);color:#fff;box-shadow:none;border:1px solid rgba(255,255,255,.35);}
+  .btn.red{background:#e63946;color:#fff;box-shadow:0 2px 0 #a51b26;}
+  .hidden{display:none !important;}
+  /* iOS Safari fires tap->click on non-button elements only when they're marked clickable */
+  .tchip,.card,.slot,.workpile,.iconbtn,.closex,.stackwrap,.btn{cursor:pointer;touch-action:manipulation;}
+
+  /* ---------- Screens ---------- */
+  .screen{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:18px;z-index:20;}
+  .card-panel{background:rgba(0,0,0,.35);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.15);
+    border-radius:18px;padding:24px 22px;width:100%;max-width:420px;box-shadow:0 12px 40px var(--shadow);}
+  .card-panel h1{margin:0 0 4px;font-size:30px;letter-spacing:.5px;text-align:center;}
+  .card-panel h1 span{color:var(--gold);}
+  .card-panel .sub{text-align:center;opacity:.8;margin:0 0 18px;font-size:14px;}
+  label{display:block;font-size:13px;opacity:.85;margin:12px 0 5px;font-weight:600;}
+  input,select{width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,.25);
+    background:rgba(255,255,255,.95);color:#111;font-size:16px;font-weight:600;}
+  .row{display:flex;gap:10px;}
+  .row>*{flex:1;}
+  .teamsel{display:flex;gap:8px;margin-top:6px;}
+  .teamsel .tchip{flex:1;text-align:center;padding:10px 4px;border-radius:10px;border:2px solid transparent;
+    font-weight:800;font-size:13px;background:rgba(255,255,255,.12);}
+  .teamsel .tchip.on{border-color:#fff;transform:scale(1.03);}
+  .divider{display:flex;align-items:center;gap:10px;margin:18px 0;opacity:.6;font-size:12px;}
+  .divider::before,.divider::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.3);}
+  .err{color:#ffd0d0;font-size:13px;text-align:center;margin-top:10px;min-height:16px;}
+
+  /* team colors */
+  .t1{--tc:#ffd43b;background:#8a6d00 !important;} .t2{--tc:#74c0fc;background:#0b4a7a !important;}
+  .t3{--tc:#ff8787;background:#7a1f2a !important;}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+  .dot.t1{background:#ffd43b !important;} .dot.t2{background:#74c0fc !important;} .dot.t3{background:#ff8787 !important;}
+
+  /* ---------- Lobby ---------- */
+  #lobbyList{list-style:none;padding:0;margin:10px 0 0;max-height:230px;overflow:auto;}
+  #lobbyList li{display:flex;align-items:center;padding:9px 10px;background:rgba(255,255,255,.08);
+    border-radius:10px;margin-bottom:6px;font-weight:600;}
+  .codebox{text-align:center;font-size:34px;font-weight:900;letter-spacing:8px;color:var(--gold);margin:6px 0;}
+
+  /* ---------- Game board ---------- */
+  #game{position:absolute;inset:0;display:flex;flex-direction:column;}
+  .topbar{display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(0,0,0,.25);}
+  .topbar .rc{font-weight:800;letter-spacing:2px;font-size:14px;}
+  .topbar .rc b{color:var(--gold);}
+  .topbar .spacer{flex:1;}
+  .iconbtn{position:relative;background:rgba(255,255,255,.15);color:#fff;border-radius:10px;padding:8px 11px;font-size:14px;font-weight:700;}
+  .badge{position:absolute;top:-6px;right:-6px;background:#e63946;color:#fff;border-radius:10px;font-size:11px;
+    padding:1px 5px;font-weight:800;}
+
+  .board{flex:1;overflow:auto;padding:8px 8px 14px;}
+  .zone-label{font-size:11px;text-transform:uppercase;letter-spacing:1px;opacity:.6;margin:2px 4px 4px;}
+  .foundations{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;padding:6px;
+    background:rgba(0,0,0,.18);border-radius:12px;margin-bottom:10px;min-height:96px;}
+  .slot{width:var(--card-w);height:var(--card-h);border-radius:var(--radius);}
+  .slot.empty{border:2px dashed rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:20px;opacity:.5;}
+  .slot.empty.target{border-color:var(--gold);opacity:1;box-shadow:0 0 0 3px rgba(244,196,48,.4);}
+
+  .myarea{display:flex;gap:8px;align-items:flex-start;justify-content:center;flex-wrap:wrap;}
+  .pilecol{display:flex;flex-direction:column;align-items:center;gap:3px;}
+  .pilecol .cap{font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.5px;}
+  .workrow{display:flex;gap:6px;}
+  .workpile{width:var(--card-w);min-height:var(--card-h);position:relative;border-radius:var(--radius);}
+  .workpile.empty{border:2px dashed rgba(255,255,255,.25);height:var(--card-h);}
+  .workpile.target{box-shadow:0 0 0 3px rgba(244,196,48,.5);border-radius:var(--radius);}
+  .stackwrap{position:relative;}
+
+  /* Card visuals */
+  .card{width:var(--card-w);height:var(--card-h);border-radius:var(--radius);background:#fff;color:#111;
+    position:relative;box-shadow:0 1px 3px rgba(0,0,0,.4);display:flex;flex-direction:column;justify-content:space-between;
+    padding:4px 5px;font-weight:800;border:1px solid #d9d9d9;}
+  .card.red{color:#d61f2b;}
+  .card .tl{font-size:15px;line-height:1;}
+  .card .br{font-size:15px;line-height:1;align-self:flex-end;transform:rotate(180deg);}
+  .card .pip{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:26px;opacity:.9;}
+  .card.back{background:repeating-linear-gradient(45deg,#1e5aa8,#1e5aa8 6px,#2f74d0 6px,#2f74d0 12px);
+    border:1px solid #14417a;}
+  .card.sel{outline:3px solid var(--gold);outline-offset:1px;transform:translateY(-6px);z-index:5;}
+  .card.playable{cursor:pointer;}
+  .card.dim{filter:brightness(.75);}
+  .fan{position:absolute;left:0;width:var(--card-w);}
+  .pilecount{position:absolute;bottom:-2px;right:-2px;background:#000;color:#fff;border-radius:10px;
+    font-size:11px;padding:0 5px;font-weight:800;}
+
+  .controls{display:flex;gap:8px;justify-content:center;padding:8px;background:rgba(0,0,0,.22);}
+  .nerts-btn{font-size:18px;padding:12px 26px;}
+  .hint{text-align:center;font-size:12px;opacity:.75;padding:2px;}
+
+  /* Panels (chat / score) */
+  .drawer{position:absolute;top:0;bottom:0;right:0;width:min(340px,86vw);background:var(--felt2);
+    box-shadow:-8px 0 30px var(--shadow);z-index:30;display:flex;flex-direction:column;transform:translateX(100%);
+    transition:transform .22s ease;}
+  .drawer.open{transform:translateX(0);}
+  .drawer .dhead{display:flex;align-items:center;padding:12px 14px;background:rgba(0,0,0,.25);font-weight:800;}
+  .drawer .dhead .spacer{flex:1;}
+  .drawer .closex{background:none;color:#fff;font-size:22px;padding:0 6px;}
+  .scorelist{padding:12px;overflow:auto;flex:1;}
+  .teamcard{background:rgba(255,255,255,.08);border-radius:12px;padding:12px;margin-bottom:12px;border-left:5px solid var(--tc,#fff);}
+  .teamcard h3{margin:0 0 4px;display:flex;align-items:center;}
+  .teamcard .score{font-size:30px;font-weight:900;color:var(--gold);}
+  .teamcard .members{font-size:13px;opacity:.85;margin-top:4px;}
+  .bar{height:8px;background:rgba(255,255,255,.15);border-radius:6px;overflow:hidden;margin-top:8px;}
+  .bar>i{display:block;height:100%;background:var(--gold);}
+
+  .chatlog{flex:1;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:7px;}
+  .msg{max-width:85%;padding:8px 11px;border-radius:12px;font-size:14px;line-height:1.3;word-wrap:break-word;}
+  .msg .who{font-size:11px;font-weight:800;opacity:.9;display:block;margin-bottom:2px;}
+  .msg.them{background:rgba(255,255,255,.12);align-self:flex-start;border-bottom-left-radius:3px;}
+  .msg.me{background:var(--gold);color:#3a2c00;align-self:flex-end;border-bottom-right-radius:3px;}
+  .msg.sys{align-self:center;background:none;opacity:.7;font-size:12px;font-style:italic;}
+  .chatinput{display:flex;gap:6px;padding:10px;background:rgba(0,0,0,.25);}
+  .chatinput input{flex:1;}
+
+  /* Toast + overlay */
+  .toast{position:absolute;top:56px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);
+    padding:10px 18px;border-radius:30px;font-weight:700;z-index:40;opacity:0;transition:opacity .25s;pointer-events:none;text-align:center;}
+  .toast.show{opacity:1;}
+  .overlay{position:absolute;inset:0;background:rgba(0,0,0,.75);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .overlay .card-panel{text-align:center;}
+  .big{font-size:40px;font-weight:900;color:var(--gold);margin:6px 0;}
+
+  @media(min-width:600px){:root{--card-w:66px;--card-h:94px;}}
+</style>
+</head>
+<body>
+
+<!-- ============ CONFIG NEEDED SCREEN ============ -->
+<div id="needConfig" class="screen hidden">
+  <div class="card-panel">
+    <h1>Almost <span>there</span></h1>
+    <p class="sub">This game needs a free Firebase key pasted in before it can go live. Open <b>index.html</b>, find the <code>firebaseConfig</code> block near the bottom, and paste your project's config. Full steps are in the setup guide I sent you.</p>
+  </div>
+</div>
+
+<!-- ============ HOME SCREEN ============ -->
+<div id="home" class="screen hidden">
+  <div class="card-panel">
+    <h1>Family <span>Nerts</span></h1>
+    <p class="sub">Real-time card racing. First team to 100 wins. 🔥</p>
+    <label>Your name</label>
+    <input id="nameInput" maxlength="14" placeholder="e.g. Grandma">
+    <label>Your team</label>
+    <div class="teamsel" id="teamSel">
+      <div class="tchip t1 on" data-team="1">Team 1</div>
+      <div class="tchip t2" data-team="2">Team 2</div>
+      <div class="tchip t3" data-team="3">Team 3</div>
+    </div>
+    <label>Create a new game</label>
+    <button class="btn" id="createBtn" style="width:100%">Create Game Room</button>
+    <div class="divider">or join one</div>
+    <div class="row">
+      <input id="codeInput" maxlength="4" placeholder="CODE" style="text-transform:uppercase;text-align:center;letter-spacing:4px;">
+      <button class="btn ghost" id="joinBtn" style="flex:0 0 90px">Join</button>
+    </div>
+    <div class="err" id="homeErr"></div>
+    <a href="index.html" style="display:block;text-align:center;margin-top:14px;color:rgba(255,255,255,.8);font-weight:600;text-decoration:none;font-size:13px;">← Play solo vs bots (offline)</a>
+  </div>
+</div>
+
+<!-- ============ LOBBY SCREEN ============ -->
+<div id="lobby" class="screen hidden">
+  <div class="card-panel">
+    <h1>Game <span>Lobby</span></h1>
+    <p class="sub">Share this code with the family:</p>
+    <div class="codebox" id="lobbyCode">----</div>
+    <button class="btn ghost" id="shareBtn" style="width:100%">📋 Copy invite link</button>
+    <label>Players in the room</label>
+    <ul id="lobbyList"></ul>
+    <div class="teamsel" id="lobbyTeamSel" style="margin-top:14px;">
+      <div class="tchip t1" data-team="1">Team 1</div>
+      <div class="tchip t2" data-team="2">Team 2</div>
+      <div class="tchip t3" data-team="3">Team 3</div>
+    </div>
+    <div class="hint">Tap a team above to switch. Solo? Just be the only one on your team.</div>
+
+    <div id="botBox" class="hidden" style="margin-top:14px;">
+      <label>Play 1v1? Add a computer opponent</label>
+      <div class="teamsel" id="botDiffSel">
+        <div class="tchip on" data-diff="easy" style="background:rgba(255,255,255,.12)">🙂 Easy</div>
+        <div class="tchip" data-diff="med" style="background:rgba(255,255,255,.12)">😎 Medium</div>
+        <div class="tchip" data-diff="hard" style="background:rgba(255,255,255,.12)">🔥 Hard</div>
+      </div>
+      <button class="btn ghost" id="addBotBtn" style="width:100%;margin-top:8px;">🤖 Add Bot Opponent</button>
+    </div>
+
+    <button class="btn" id="startBtn" style="width:100%;margin-top:14px;">Start Game</button>
+    <div class="hint" id="hostHint"></div>
+  </div>
+</div>
+
+<!-- ============ GAME SCREEN ============ -->
+<div id="game" class="hidden">
+  <div class="topbar">
+    <div class="rc">Room <b id="gameCode">----</b></div>
+    <div class="spacer"></div>
+    <button class="iconbtn" id="scoreOpen">🏆 <span id="topScore">0</span></button>
+    <button class="iconbtn" id="chatOpen">💬<span class="badge hidden" id="chatBadge">0</span></button>
+  </div>
+
+  <div class="board">
+    <div class="zone-label">Center foundations — anyone can play here</div>
+    <div class="foundations" id="foundations"></div>
+
+    <div class="zone-label">Your cards</div>
+    <div class="myarea">
+      <div class="pilecol">
+        <div class="cap">Stock</div>
+        <div id="stockPile"></div>
+      </div>
+      <div class="pilecol">
+        <div class="cap">Waste</div>
+        <div id="wastePile"></div>
+      </div>
+      <div class="pilecol" style="flex:1 1 auto;">
+        <div class="cap">Work piles</div>
+        <div class="worrow worrow" id="workRow" style="display:flex;gap:6px;"></div>
+      </div>
+      <div class="pilecol">
+        <div class="cap">Nerts</div>
+        <div id="nertsPile"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hint" id="turnHint">Tap the stock to flip • tap a card to select, then tap where it goes • double-tap to auto-play up top</div>
+  <div class="controls">
+    <button class="btn ghost" id="flipBtn">🔄 Flip Stock</button>
+    <button class="btn red nerts-btn hidden" id="nertsBtn">NERTS! 🎉</button>
+  </div>
+</div>
+
+<!-- Score drawer -->
+<div class="drawer" id="scoreDrawer">
+  <div class="dhead">🏆 Scoreboard <span style="opacity:.6;font-weight:600;margin-left:6px;font-size:13px;">to <span id="targetLabel">100</span></span><div class="spacer"></div><button class="closex" data-close="scoreDrawer">×</button></div>
+  <div class="scorelist" id="scoreList"></div>
+</div>
+
+<!-- Chat drawer -->
+<div class="drawer" id="chatDrawer">
+  <div class="dhead">💬 Trash Talk<div class="spacer"></div><button class="closex" data-close="chatDrawer">×</button></div>
+  <div class="chatlog" id="chatLog"></div>
+  <div class="chatinput">
+    <input id="chatText" maxlength="140" placeholder="Talk some trash…">
+    <button class="btn" id="chatSend">Send</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Round / game over overlay -->
+<div class="overlay hidden" id="overlay">
+  <div class="card-panel">
+    <div id="ovTitle" style="font-size:20px;font-weight:800;"></div>
+    <div class="big" id="ovBig"></div>
+    <div id="ovBody" style="font-size:14px;opacity:.9;line-height:1.5;"></div>
+    <button class="btn" id="ovBtn" style="width:100%;margin-top:16px;"></button>
+    <div class="hint" id="ovHint"></div>
+  </div>
+</div>
+
+<!-- ===== Firebase SDK ===== -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<script>
+/* ============================================================
+   PASTE YOUR FIREBASE CONFIG BELOW
+   (Firebase console → Project settings → your web app → config)
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyA2b5iGJiE1R5hqiXRc4XA9ANBqEH8bUeg",
+  authDomain: "nerts-8534b.firebaseapp.com",
+  databaseURL: "https://nerts-8534b-default-rtdb.firebaseio.com",
+  projectId: "nerts-8534b",
+  storageBucket: "nerts-8534b.firebasestorage.app",
+  messagingSenderId: "822229885446",
+  appId: "1:822229885446:web:9a02d718f667ba2aaf9987"
+};
+/* ============================================================ */
+
+// ---------- boot / config check ----------
+const CONFIG_OK = !JSON.stringify(firebaseConfig).includes("PASTE_");
+let db = null;
+if (CONFIG_OK) {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.database();
+}
+
+// ---------- helpers ----------
+const $ = id => document.getElementById(id);
+const SUITS = ["♠","♥","♦","♣"];       // 0 spade,1 heart,2 diamond,3 club
+const isRed = s => s===1 || s===2;
+const RANKS = ["","A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+function show(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.add('hidden')); $(id).classList.remove('hidden'); }
+function uid(){ return 'p'+Math.random().toString(36).slice(2,9); }
+function code4(){ const a="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let c=""; for(let i=0;i<4;i++) c+=a[Math.floor(Math.random()*a.length)]; return c; }
+
+// ---------- persistent identity ----------
+let ME = JSON.parse(localStorage.getItem('nerts_me')||'null') || { id: uid(), name:"", team:1 };
+function saveMe(){ localStorage.setItem('nerts_me', JSON.stringify(ME)); }
+
+// ---------- game state ----------
+let ROOM=null, roomRef=null;
+let pub = { players:{}, meta:{}, round:{} };   // synced public state
+let hand = { nerts:[], work:[[],[],[],[]], stock:[], waste:[] };  // my private cards
+let dealtSeq = -1;
+let selection = null;   // {zone, pile, index, cards:[]}
+let unread = 0;
+let FOUNDATION_SLOTS = 12;
+
+// ---- bot engine state (bots run inside the HOST's browser) ----
+let botHands = {};       // botId -> {nerts,work,stock,waste}
+let botDealtSeq = {};    // botId -> seq last dealt
+let botNextMove = {};    // botId -> timestamp when it may move again
+let botTimer = null;
+let currentBotDiff = 'easy';
+const BOT_NAMES = ['Botsy 🤖','Ace McBot','Nerty 🤖','Sir Shuffle','Card Sharkbot','Aunt R.O.B.O.'];
+const BOT_DIFF = { easy:{min:1100,max:1700,unloadNerts:0.5}, med:{min:650,max:1000,unloadNerts:0.8}, hard:{min:300,max:520,unloadNerts:1} };
+const BOT_QUIPS = ["beep boop, you're going down 🤖","my circuits love this game","too slow, human 😏","0101 = victory","is that your best move?","calculating your defeat…","gg easy 💾"];
+
+// ---------- deck ----------
+function freshDeck(){
+  const d=[];
+  for(let s=0;s<4;s++) for(let r=1;r<=13;r++) d.push({r,s});
+  for(let i=d.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [d[i],d[j]]=[d[j],d[i]]; }
+  return d;
+}
+function dealHand(){
+  const d=freshDeck();
+  const nerts=d.splice(0,13);
+  const work=[[d.pop()],[d.pop()],[d.pop()],[d.pop()]];
+  const stock=d; const waste=[];
+  return {nerts,work,stock,waste};
+}
+
+/* ==========================================================
+   SCREEN 1: HOME
+   ========================================================== */
+if(!CONFIG_OK){ show('needConfig'); }
+else {
+  show('home');
+  // restore name
+  if(ME.name) $('nameInput').value = ME.name;
+  // team chips on home
+  document.querySelectorAll('#teamSel .tchip').forEach(c=>{
+    if(+c.dataset.team===ME.team) setTeamChip('#teamSel',ME.team);
+    c.onclick=()=>{ ME.team=+c.dataset.team; setTeamChip('#teamSel',ME.team); };
+  });
+  // prefill code from URL (?r=CODE)
+  const urlCode=new URLSearchParams(location.search).get('r');
+  if(urlCode) $('codeInput').value=urlCode.toUpperCase();
+}
+function setTeamChip(sel,team){
+  document.querySelectorAll(sel+' .tchip').forEach(c=>c.classList.toggle('on',+c.dataset.team===team));
+}
+
+$('createBtn') && ($('createBtn').onclick=()=>startFlow(true));
+$('joinBtn')   && ($('joinBtn').onclick  =()=>startFlow(false));
+
+async function startFlow(isCreate){
+  const name=$('nameInput').value.trim();
+  if(!name){ $('homeErr').textContent="Please enter your name first."; return; }
+  ME.name=name; saveMe();
+  let room;
+  if(isCreate){
+    room=code4();
+    await db.ref('rooms/'+room+'/meta').set({ host:ME.id, status:'lobby', target:100, createdAt:firebase.database.ServerValue.TIMESTAMP });
+  } else {
+    room=$('codeInput').value.trim().toUpperCase();
+    if(room.length!==4){ $('homeErr').textContent="Enter the 4-letter room code."; return; }
+    const snap=await db.ref('rooms/'+room+'/meta').get();
+    if(!snap.exists()){ $('homeErr').textContent="No room with that code. Check with the host."; return; }
+  }
+  enterRoom(room);
+}
+
+/* ==========================================================
+   ENTER ROOM — attach listeners, join players list
+   ========================================================== */
+function enterRoom(room){
+  ROOM=room; roomRef=db.ref('rooms/'+room);
+  // add myself
+  const meRef=roomRef.child('players/'+ME.id);
+  meRef.update({ name:ME.name, team:ME.team, connected:true, joinedAt:firebase.database.ServerValue.TIMESTAMP });
+  meRef.child('connected').onDisconnect().set(false);
+
+  roomRef.child('meta').on('value', s=>{ pub.meta=s.val()||{}; onState(); });
+  roomRef.child('players').on('value', s=>{ pub.players=s.val()||{}; onState(); });
+  roomRef.child('round').on('value', s=>{ pub.round=s.val()||{}; onRound(); });
+  roomRef.child('chat').limitToLast(60).on('child_added', s=>onChat(s.val()));
+
+  $('lobbyCode').textContent=room; $('gameCode').textContent=room;
+  setTeamChip('#lobbyTeamSel',ME.team);
+  document.querySelectorAll('#lobbyTeamSel .tchip').forEach(c=>{
+    c.onclick=()=>{ ME.team=+c.dataset.team; saveMe(); setTeamChip('#lobbyTeamSel',ME.team); meRef.update({team:ME.team}); };
+  });
+  // bot difficulty chips
+  document.querySelectorAll('#botDiffSel .tchip').forEach(c=>{
+    c.onclick=()=>{ currentBotDiff=c.dataset.diff;
+      document.querySelectorAll('#botDiffSel .tchip').forEach(x=>x.classList.toggle('on',x===c)); };
+  });
+  // add a bot opponent (host only)
+  $('addBotBtn') && ($('addBotBtn').onclick=()=>{
+    const existing=Object.values(pub.players||{}).filter(p=>p.isBot).length;
+    if(existing>=5){ toast("That's plenty of bots!"); return; }
+    const id='bot'+Math.random().toString(36).slice(2,8);
+    const team = (ME.team===1?2:1); // opposite team so it's you vs bot
+    const name = BOT_NAMES[existing % BOT_NAMES.length];
+    roomRef.child('players/'+id).set({ name, team, isBot:true, controller:ME.id,
+      difficulty:currentBotDiff, connected:true, total:0, joinedAt:firebase.database.ServerValue.TIMESTAMP });
+    roomRef.child('chat').push({ name, id, text:"beep boop — ready to play 🤖", sys:false, ts:firebase.database.ServerValue.TIMESTAMP });
+    toast(name+" joined on Team "+team);
+  });
+  onState();
+}
+
+/* ==========================================================
+   STATE ROUTER
+   ========================================================== */
+function onState(){
+  if(!ROOM) return;
+  const status=pub.meta.status||'lobby';
+  renderLobbyList();
+  renderScore();
+  if(status==='lobby'){ show('lobby'); toggleGame(false); }
+  else { document.querySelectorAll('.screen').forEach(s=>s.classList.add('hidden')); toggleGame(true); }
+  // host-only start button + bot controls
+  const amHost=pub.meta.host===ME.id;
+  $('startBtn').classList.toggle('hidden', !amHost);
+  $('botBox') && $('botBox').classList.toggle('hidden', !amHost);
+  $('hostHint').textContent = amHost ? "You're the host — start when everyone's in." : "Waiting for the host to start…";
+  $('targetLabel').textContent = pub.meta.target||100;
+  ensureBotLoop();
+}
+function toggleGame(on){ $('game').classList.toggle('hidden',!on); }
+
+function renderLobbyList(){
+  const ul=$('lobbyList'); if(!ul) return; ul.innerHTML="";
+  const amHost=pub.meta.host===ME.id;
+  Object.entries(pub.players||{}).sort((a,b)=>(a[1].joinedAt||0)-(b[1].joinedAt||0)).forEach(([id,p])=>{
+    const li=document.createElement('li');
+    let right;
+    if(p.isBot && amHost){
+      right=`<button class="btn ghost" data-rmbot="${id}" style="margin-left:auto;padding:3px 9px;font-size:12px;">Remove</button>`;
+    } else {
+      right='<span style="opacity:.6;margin-left:auto;font-size:12px;">'+(p.isBot?'🤖 '+(p.difficulty||'')+' ':'')+'Team '+(p.team||1)+'</span>';
+      if(p.connected===false && !p.isBot) right='<span style="opacity:.5;margin-left:auto;font-size:12px;">offline</span>';
+    }
+    li.innerHTML=`<span class="dot t${p.team||1}"></span>${p.name||'?'} `+right;
+    ul.appendChild(li);
+  });
+  ul.querySelectorAll('[data-rmbot]').forEach(b=>b.onclick=()=>{ roomRef.child('players/'+b.dataset.rmbot).remove(); delete botHands[b.dataset.rmbot]; });
+}
+
+$('startBtn') && ($('startBtn').onclick=()=>{
+  roomRef.child('meta').update({status:'playing'});
+  roomRef.child('round').set({ seq:1, status:'playing', foundations:{}, nertsBy:null, startedAt:firebase.database.ServerValue.TIMESTAMP });
+});
+
+$('shareBtn') && ($('shareBtn').onclick=()=>{
+  const link=location.origin+location.pathname+'?r='+ROOM;
+  navigator.clipboard?.writeText(link).then(()=>toast('Invite link copied!')).catch(()=>toast('Link: '+link));
+});
+
+/* ==========================================================
+   ROUND LIFECYCLE
+   ========================================================== */
+function onRound(){
+  const r=pub.round||{};
+  const seq=r.seq||0;
+  if((r.status==='playing') && seq!==dealtSeq){
+    // new round -> deal my own fresh hand
+    const restored = tryRestoreHand(seq);
+    if(!restored){
+      hand=dealHand();
+      persistHand(seq);
+    }
+    dealtSeq=seq;
+    // reset my public round stats
+    roomRef.child('players/'+ME.id).update({ played:0, nertsCount:hand.nerts.length });
+    selection=null;
+    $('nertsBtn').classList.add('hidden');
+    hideOverlay();
+  }
+  if(r.status==='playing') maybeDealBots(seq);
+  if(r.status==='roundover'){ handleRoundOver(); }
+  if(r.status==='gameover'){ handleGameOver(); }
+  renderFoundations();
+  renderHand();
+}
+
+function tryRestoreHand(seq){
+  try{
+    const saved=JSON.parse(localStorage.getItem('nerts_hand_'+ROOM)||'null');
+    if(saved && saved.seq===seq){ hand=saved.hand; return true; }
+  }catch(e){}
+  return false;
+}
+function persistHand(seq){
+  localStorage.setItem('nerts_hand_'+ROOM, JSON.stringify({seq, hand}));
+}
+
+/* ==========================================================
+   RENDER: FOUNDATIONS (shared)
+   ========================================================== */
+function cardEl(c, opts={}){
+  const el=document.createElement('div');
+  el.className='card'+(isRed(c.s)?' red':'')+(opts.extra? ' '+opts.extra:'');
+  el.innerHTML=`<div class="tl">${RANKS[c.r]}<br>${SUITS[c.s]}</div>`+
+               `<div class="pip">${SUITS[c.s]}</div>`+
+               `<div class="br">${RANKS[c.r]}<br>${SUITS[c.s]}</div>`;
+  return el;
+}
+function backEl(count){
+  const el=document.createElement('div'); el.className='card back';
+  if(count>0){ const b=document.createElement('div'); b.className='pilecount'; b.textContent=count; el.appendChild(b); }
+  return el;
+}
+
+function foundationsArr(){
+  const f=pub.round.foundations||{};
+  const arr=[];
+  for(let i=0;i<FOUNDATION_SLOTS;i++) arr[i]=f[i]||null;
+  return arr;
+}
+function renderFoundations(){
+  const wrap=$('foundations'); if(!wrap) return; wrap.innerHTML="";
+  const arr=foundationsArr();
+  const sel=selection;
+  arr.forEach((pile,i)=>{
+    let el;
+    if(pile && pile.length){
+      const top=pile[pile.length-1];
+      el=cardEl(top);
+      el.classList.add('slot');
+    } else {
+      el=document.createElement('div'); el.className='slot empty'; el.textContent='A';
+    }
+    // target highlight
+    if(sel && sel.cards.length===1 && canPlayFoundation(sel.cards[0], pile)){
+      el.classList.add('target');
+      if(pile&&pile.length) el.classList.add('sel');
+    }
+    el.onclick=()=>onFoundationTap(i);
+    wrap.appendChild(el);
+  });
+}
+
+/* ==========================================================
+   RENDER: MY HAND
+   ========================================================== */
+function renderHand(){
+  // stock
+  const sp=$('stockPile'); sp.innerHTML="";
+  const sEl = hand.stock.length? backEl(hand.stock.length) : emptySlot('↻');
+  sEl.onclick=flipStock; sp.appendChild(sEl);
+
+  // waste
+  const wp=$('wastePile'); wp.innerHTML="";
+  if(hand.waste.length){
+    const top=hand.waste[hand.waste.length-1];
+    const el=cardEl(top,{extra:'playable'});
+    if(isSel('waste',0,hand.waste.length-1)) el.classList.add('sel');
+    el.onclick=()=>selectCard('waste',0,hand.waste.length-1);
+    el.ondblclick=()=>dblAuto('waste',0);
+    wp.appendChild(el);
+  } else wp.appendChild(emptySlot(''));
+
+  // work piles (fanned)
+  const wr=$('workRow'); wr.innerHTML="";
+  hand.work.forEach((pile,pi)=>{
+    const col=document.createElement('div'); col.className='workpile';
+    if(!pile.length){ col.classList.add('empty'); }
+    if(selection && canDropWork(selection.cards, pile)) col.classList.add('target');
+    const wrapS=document.createElement('div'); wrapS.className='stackwrap';
+    wrapS.style.height=(pile.length? (pile.length-1)*22 + 82 : 82)+'px';
+    pile.forEach((c,ci)=>{
+      const el=cardEl(c,{extra:'playable'});
+      el.classList.add('fan'); el.style.top=(ci*22)+'px';
+      if(isSel('work',pi,ci)) el.classList.add('sel');
+      el.onclick=(ev)=>{ ev.stopPropagation(); selectCard('work',pi,ci); };
+      el.ondblclick=(ev)=>{ ev.stopPropagation(); dblAuto('work',pi,ci); };
+      wrapS.appendChild(el);
+    });
+    col.appendChild(wrapS);
+    col.onclick=()=>onWorkTap(pi);
+    wr.appendChild(col);
+  });
+
+  // nerts
+  const np=$('nertsPile'); np.innerHTML="";
+  if(hand.nerts.length){
+    const top=hand.nerts[hand.nerts.length-1];
+    const el=cardEl(top,{extra:'playable'});
+    if(isSel('nerts',0,hand.nerts.length-1)) el.classList.add('sel');
+    const cnt=document.createElement('div'); cnt.className='pilecount'; cnt.textContent=hand.nerts.length; el.appendChild(cnt);
+    el.onclick=()=>selectCard('nerts',0,hand.nerts.length-1);
+    el.ondblclick=()=>dblAuto('nerts',0);
+    np.appendChild(el);
+  } else {
+    np.appendChild(emptySlot('✓'));
+  }
+}
+function emptySlot(txt){ const e=document.createElement('div'); e.className='slot empty'; e.textContent=txt; return e; }
+
+/* ==========================================================
+   SELECTION + MOVE LOGIC
+   ========================================================== */
+function isSel(zone,pile,index){ return selection && selection.zone===zone && selection.pile===pile && selection.index===index; }
+
+function selectCard(zone,pile,index){
+  let cards;
+  if(zone==='nerts') cards=[hand.nerts[hand.nerts.length-1]];
+  else if(zone==='waste') cards=[hand.waste[hand.waste.length-1]];
+  else { // work: grab run from index to end IF valid run, else only if top card
+    const p=hand.work[pile];
+    const run=p.slice(index);
+    if(run.length>1 && !validRun(run)){ if(index!==p.length-1){ toast("That's not a movable run"); return; } }
+    cards=run;
+  }
+  if(isSel(zone,pile,index)){ selection=null; } // toggle off
+  else selection={zone,pile,index,cards};
+  renderFoundations(); renderHand();
+}
+function validRun(run){
+  for(let i=0;i<run.length-1;i++){
+    const a=run[i], b=run[i+1];
+    if(!(b.r===a.r-1 && isRed(a.s)!==isRed(b.s))) return false;
+  }
+  return true;
+}
+function canPlayFoundation(card, pile){
+  if(!pile || !pile.length) return card.r===1;           // empty accepts Ace
+  const top=pile[pile.length-1];
+  return card.s===top.s && card.r===top.r+1;             // build up same suit
+}
+function canDropWork(cards, pile){
+  const c=cards[0];
+  if(!pile || !pile.length) return true;                  // empty work accepts anything
+  const top=pile[pile.length-1];
+  return c.r===top.r-1 && isRed(c.s)!==isRed(top.s);      // build down, alt color
+}
+
+// remove selected cards from their source (local)
+function removeSelected(s){
+  s=s||selection;
+  if(s.zone==='nerts') hand.nerts.pop();
+  else if(s.zone==='waste') hand.waste.pop();
+  else hand.work[s.pile].splice(s.index);
+}
+
+function onFoundationTap(i){
+  if(!selection){ return; }
+  if(selection.cards.length!==1){ toast("Only single cards go up top"); return; }
+  const card=selection.cards[0];
+  const arr=foundationsArr();
+  if(!canPlayFoundation(card, arr[i])){ toast("Can't play there"); return; }
+  playToFoundation(i, card);
+}
+
+function playToFoundation(slot, card){
+  const src=selection;
+  roomRef.child('round/foundations/'+slot).transaction(pile=>{
+    pile=pile||[];
+    const ok = pile.length ? (card.s===pile[pile.length-1].s && card.r===pile[pile.length-1].r+1)
+                           : (card.r===1);
+    if(!ok) return; // abort
+    pile.push({r:card.r,s:card.s,by:ME.id});
+    return pile;
+  }, (err,committed)=>{
+    if(err){ toast("Sync error, try again"); return; }
+    if(!committed){ toast("Someone beat you to it!"); return; }
+    // success: remove from source, bump stats
+    removeSelected(src); selection=null;
+    bumpPlayed();
+    persistHand(dealtSeq); renderHand(); renderFoundations();
+    checkNerts();
+  });
+}
+
+function onWorkTap(pi){
+  if(!selection) return;
+  const pile=hand.work[pi];
+  if(selection.zone==='work' && selection.pile===pi) { selection=null; renderHand(); renderFoundations(); return; }
+  if(!canDropWork(selection.cards, pile)){ toast("Can't stack there"); return; }
+  const cards=selection.cards.slice();
+  removeSelected();
+  hand.work[pi]=hand.work[pi].concat(cards);
+  selection=null;
+  persistHand(dealtSeq); renderHand(); renderFoundations();
+  checkNerts();
+}
+
+// double-tap: auto play to a legal foundation
+function dblAuto(zone,pile,index){
+  let card;
+  if(zone==='nerts') card=hand.nerts[hand.nerts.length-1];
+  else if(zone==='waste') card=hand.waste[hand.waste.length-1];
+  else { const p=hand.work[pile]; if(index!==p.length-1) return; card=p[p.length-1]; }
+  const arr=foundationsArr();
+  let slot=-1;
+  for(let i=0;i<arr.length;i++){ if(arr[i]&&arr[i].length && canPlayFoundation(card,arr[i])){slot=i;break;} }
+  if(slot<0 && card.r===1){ for(let i=0;i<arr.length;i++){ if(!arr[i]||!arr[i].length){slot=i;break;} } }
+  if(slot<0){ toast("No foundation for that card"); return; }
+  selection={zone,pile,index, cards:[card]};
+  playToFoundation(slot, card);
+}
+
+function flipStock(){
+  if(!hand.stock.length && !hand.waste.length) return;
+  if(!hand.stock.length){ // recycle waste
+    hand.stock=hand.waste.reverse(); hand.waste=[];
+  } else {
+    const n=Math.min(3,hand.stock.length);
+    for(let i=0;i<n;i++) hand.waste.push(hand.stock.pop());
+  }
+  selection=null; persistHand(dealtSeq); renderHand();
+}
+$('flipBtn') && ($('flipBtn').onclick=flipStock);
+
+function bumpPlayed(){
+  roomRef.child('players/'+ME.id).child('played').transaction(v=>(v||0)+1);
+  roomRef.child('players/'+ME.id).update({ nertsCount:hand.nerts.length });
+}
+
+/* ==========================================================
+   NERTS! (round end trigger)
+   ========================================================== */
+function checkNerts(){
+  if(hand.nerts.length===0){
+    $('nertsBtn').classList.remove('hidden');
+    // auto-call
+    callNerts();
+  }
+}
+$('nertsBtn') && ($('nertsBtn').onclick=callNerts);
+function callNerts(){
+  if((pub.round.status)!=='playing') return;
+  roomRef.child('round').update({ status:'roundover', nertsBy:ME.id });
+  roomRef.child('players/'+ME.id).update({ nertsCount:0 });
+  pushChat(ME.name+" called NERTS! 🎉", true);
+}
+
+/* ==========================================================
+   ROUND OVER -> scoring
+   ========================================================== */
+let scoredForSeq=-1;
+function handleRoundOver(){
+  const seq=pub.round.seq;
+  // score my own contribution once, idempotently.
+  // Use my LOCAL hand as the source of truth for nerts-left (race-free:
+  // each client scores only its own player node and knows its own hand exactly).
+  if(scoredForSeq!==seq){
+    scoredForSeq=seq;
+    const nertsLeft=hand.nerts.length;
+    roomRef.child('players/'+ME.id).transaction(p=>{
+      if(!p) return p;
+      if(p.scoredRound===seq) return p;   // already scored
+      const round=(p.played||0) - 2*nertsLeft;
+      p.total=(p.total||0)+round;
+      p.lastRound=round;
+      p.nertsCount=nertsLeft;
+      p.scoredRound=seq;
+      return p;
+    }, ()=>{ setTimeout(evaluateWinnerAndShow,500); });
+  } else {
+    evaluateWinnerAndShow();
+  }
+  scoreBotsIfHost(seq);
+}
+
+// Host tallies each bot it controls (bots have no browser of their own).
+function scoreBotsIfHost(seq){
+  if(pub.meta.host!==ME.id) return;
+  Object.entries(pub.players||{}).forEach(([id,p])=>{
+    if(!p.isBot || p.controller!==ME.id) return;
+    const h=botHands[id];
+    const nertsLeft = h ? h.nerts.length : (p.nertsCount||0);
+    roomRef.child('players/'+id).transaction(bp=>{
+      if(!bp) return bp;
+      if(bp.scoredRound===seq) return bp;
+      const round=(bp.played||0) - 2*nertsLeft;
+      bp.total=(bp.total||0)+round; bp.lastRound=round; bp.nertsCount=nertsLeft; bp.scoredRound=seq;
+      return bp;
+    });
+  });
+}
+
+function teamTotals(){
+  const t={};
+  Object.values(pub.players||{}).forEach(p=>{
+    const k=p.team||1;
+    t[k]=t[k]||{total:0,members:[],last:0};
+    t[k].total+=(p.total||0);
+    t[k].last+=(p.lastRound||0);
+    t[k].members.push(p.name||'?');
+  });
+  return t;
+}
+
+function evaluateWinnerAndShow(){
+  const target=pub.meta.target||100;
+  const t=teamTotals();
+  const nertsName=(pub.players[pub.round.nertsBy]||{}).name||'Someone';
+  // check winner
+  let winner=null, best=-1;
+  Object.entries(t).forEach(([k,v])=>{ if(v.total>=target && v.total>best){best=v.total;winner=k;} });
+  if(winner){
+    // host promotes to gameover
+    if(pub.meta.host===ME.id) roomRef.child('round').update({status:'gameover'});
+    return; // gameover handler shows overlay
+  }
+  // show round summary overlay
+  let body="";
+  Object.entries(t).sort((a,b)=>b[1].total-a[1].total).forEach(([k,v])=>{
+    const sign=v.last>=0?'+':'';
+    body+=`<div style="margin:6px 0;"><span class="dot t${k}"></span><b>Team ${k}</b>: ${v.total} <span style="opacity:.7">(${sign}${v.last} this round)</span></div>`;
+  });
+  $('ovTitle').textContent=nertsName+" went out!";
+  $('ovBig').textContent="Round Over";
+  $('ovBody').innerHTML=body;
+  const amHost=pub.meta.host===ME.id;
+  $('ovBtn').textContent = amHost? "Deal Next Round ▶" : "Waiting for host…";
+  $('ovBtn').disabled=!amHost;
+  $('ovBtn').onclick=()=>{ if(amHost) nextRound(); };
+  $('ovHint').textContent="Cards played to the center = +1 each. Cards left in your Nerts pile = −2 each.";
+  showOverlay();
+}
+
+function nextRound(){
+  const seq=(pub.round.seq||1)+1;
+  roomRef.child('round').set({ seq, status:'playing', foundations:{}, nertsBy:null, startedAt:firebase.database.ServerValue.TIMESTAMP });
+}
+
+function handleGameOver(){
+  const target=pub.meta.target||100;
+  const t=teamTotals();
+  let winner=null,best=-1;
+  Object.entries(t).forEach(([k,v])=>{ if(v.total>best){best=v.total;winner=k;} });
+  let body="";
+  Object.entries(t).sort((a,b)=>b[1].total-a[1].total).forEach(([k,v])=>{
+    body+=`<div style="margin:6px 0;"><span class="dot t${k}"></span><b>Team ${k}</b>: ${v.total} — ${v.members.join(', ')}</div>`;
+  });
+  $('ovTitle').textContent="🏆 We have a winner!";
+  $('ovBig').textContent="Team "+winner+" wins!";
+  $('ovBody').innerHTML=body;
+  const amHost=pub.meta.host===ME.id;
+  $('ovBtn').textContent= amHost? "🔄 New Game (reset scores)" : "Host can restart";
+  $('ovBtn').disabled=!amHost;
+  $('ovBtn').onclick=()=>{ if(amHost) resetGame(); };
+  $('ovHint').textContent="";
+  showOverlay();
+}
+function resetGame(){
+  const updates={};
+  Object.keys(pub.players||{}).forEach(id=>{ updates['players/'+id+'/total']=0; updates['players/'+id+'/lastRound']=0; updates['players/'+id+'/scoredRound']=0; updates['players/'+id+'/played']=0; });
+  roomRef.update(updates);
+  Object.keys(botDealtSeq).forEach(k=>delete botDealtSeq[k]); // force re-deal
+  roomRef.child('round').set({ seq:1, status:'playing', foundations:{}, nertsBy:null, startedAt:firebase.database.ServerValue.TIMESTAMP });
+}
+
+/* ==========================================================
+   BOT ENGINE — bots are driven by the HOST's browser.
+   Each bot plays its own private deck; only shared foundation
+   plays hit Firebase (via the same safe transactions humans use).
+   ========================================================== */
+let botLastQuip={};
+function nowMs(){ return Date.now(); }
+function myBots(){ return Object.entries(pub.players||{}).filter(([id,p])=>p.isBot && p.controller===ME.id); }
+
+function ensureBotLoop(){ if(!botTimer) botTimer=setInterval(botTick,160); }
+
+function maybeDealBots(seq){
+  if(pub.meta.host!==ME.id) return;
+  myBots().forEach(([id,p])=>{
+    if(botDealtSeq[id]!==seq){
+      botHands[id]=dealHand();
+      botDealtSeq[id]=seq;
+      botNextMove[id]=nowMs()+700+Math.random()*700;   // brief head start for the human
+      roomRef.child('players/'+id).update({played:0, nertsCount:13});
+    }
+  });
+}
+
+function botTick(){
+  if(!roomRef || !pub.round || pub.round.status!=='playing') return;
+  const now=nowMs();
+  myBots().forEach(([id,p])=>{
+    if(botDealtSeq[id]!==pub.round.seq) return;
+    if(now < (botNextMove[id]||0)) return;
+    const diff=BOT_DIFF[p.difficulty]||BOT_DIFF.easy;
+    const acted=botMove(id,diff);
+    const gap=diff.min + Math.random()*(diff.max-diff.min);
+    botNextMove[id]=now + (acted?gap:gap*0.6);
+    if(acted && Math.random()<0.02 && now-(botLastQuip[id]||0)>12000){
+      botLastQuip[id]=now; pushChatAs(id, BOT_QUIPS[Math.floor(Math.random()*BOT_QUIPS.length)], false);
+    }
+  });
+}
+
+// pick ONE move; returns true if something happened
+function botMove(botId, diff){
+  const h=botHands[botId]; if(!h) return false;
+  const arr=foundationsArr();
+  const top=a=>a[a.length-1];
+  // 1) nerts -> foundation (shrinks the pile it's racing to empty)
+  if(h.nerts.length){ const c=top(h.nerts); const s=botFoundationSlot(c,arr); if(s>=0) return botToFoundation(botId,'nerts',c,s,-1); }
+  // 2) work -> foundation
+  for(let i=0;i<4;i++){ const p=h.work[i]; if(p.length){ const c=top(p); const s=botFoundationSlot(c,arr); if(s>=0) return botToFoundation(botId,'work',c,s,i); } }
+  // 3) waste -> foundation
+  if(h.waste.length){ const c=top(h.waste); const s=botFoundationSlot(c,arr); if(s>=0) return botToFoundation(botId,'waste',c,s,-1); }
+  // 4) nerts -> work pile (unload toward emptying nerts)
+  if(h.nerts.length && Math.random()<diff.unloadNerts){ const c=top(h.nerts); const wi=botWorkTarget(h,c,true); if(wi>=0){ h.work[wi].push(h.nerts.pop()); afterBotHandChange(botId); return true; } }
+  // 5) waste -> matching work pile
+  if(h.waste.length){ const c=top(h.waste); const wi=botWorkTarget(h,c,false); if(wi>=0){ h.work[wi].push(h.waste.pop()); afterBotHandChange(botId); return true; } }
+  // 6) flip / recycle stock
+  if(h.stock.length){ const n=Math.min(3,h.stock.length); for(let k=0;k<n;k++) h.waste.push(h.stock.pop()); return true; }
+  if(h.waste.length){ h.stock=h.waste.reverse(); h.waste=[]; return true; }
+  return false; // genuinely stuck this round
+}
+
+function botFoundationSlot(card,arr){
+  for(let i=0;i<arr.length;i++){ const p=arr[i]; if(p&&p.length && p[p.length-1].s===card.s && p[p.length-1].r===card.r-1) return i; }
+  if(card.r===1){ for(let i=0;i<arr.length;i++){ if(!arr[i]||!arr[i].length) return i; } }
+  return -1;
+}
+function botWorkTarget(h,card,allowEmpty){
+  for(let i=0;i<4;i++){ const p=h.work[i]; if(p.length){ const t=p[p.length-1]; if(card.r===t.r-1 && isRed(card.s)!==isRed(t.s)) return i; } }
+  if(allowEmpty){ for(let i=0;i<4;i++){ if(!h.work[i].length) return i; } }
+  return -1;
+}
+function afterBotHandChange(botId){
+  const h=botHands[botId];
+  roomRef.child('players/'+botId).update({nertsCount:h.nerts.length});
+  if(h.nerts.length===0) botCallNerts(botId);
+}
+function botToFoundation(botId,zone,card,slot,wi){
+  roomRef.child('round/foundations/'+slot).transaction(pile=>{
+    pile=pile||[];
+    const ok = pile.length ? (card.s===pile[pile.length-1].s && card.r===pile[pile.length-1].r+1) : (card.r===1);
+    if(!ok) return;
+    pile.push({r:card.r,s:card.s,by:botId});
+    return pile;
+  }, (err,committed)=>{
+    if(err||!committed) return;   // human beat it — re-evaluate next tick
+    const h=botHands[botId]; if(!h) return;
+    if(zone==='nerts') h.nerts.pop();
+    else if(zone==='waste') h.waste.pop();
+    else h.work[wi].pop();
+    roomRef.child('players/'+botId+'/played').transaction(v=>(v||0)+1);
+    afterBotHandChange(botId);
+  });
+  return true;
+}
+function botCallNerts(botId){
+  if(pub.round.status!=='playing') return;
+  roomRef.child('round').update({ status:'roundover', nertsBy:botId });
+  roomRef.child('players/'+botId).update({ nertsCount:0 });
+  const nm=(pub.players[botId]||{}).name||'The bot';
+  pushChatAs(botId, nm+" called NERTS! 🤖", true);
+}
+function pushChatAs(id,text,sys){
+  const nm=(pub.players[id]||{}).name||'Bot';
+  roomRef.child('chat').push({ name:nm, id, text, sys:!!sys, ts:firebase.database.ServerValue.TIMESTAMP });
+}
+
+/* ==========================================================
+   SCOREBOARD RENDER
+   ========================================================== */
+function renderScore(){
+  const list=$('scoreList'); if(!list) return;
+  const target=pub.meta.target||100;
+  const t=teamTotals();
+  let myTotal=0;
+  list.innerHTML="";
+  Object.entries(t).sort((a,b)=>b[1].total-a[1].total).forEach(([k,v])=>{
+    if(+k===ME.team) myTotal=v.total;
+    const div=document.createElement('div'); div.className='teamcard t'+k;
+    const pct=Math.max(0,Math.min(100,(v.total/target)*100));
+    div.innerHTML=`<h3><span class="dot t${k}"></span>Team ${k}</h3>
+      <div class="score">${v.total}</div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <div class="members">${v.members.join(' · ')}</div>`;
+    list.appendChild(div);
+  });
+  $('topScore').textContent=myTotal;
+}
+
+/* ==========================================================
+   CHAT
+   ========================================================== */
+function pushChat(text, sys=false){
+  roomRef.child('chat').push({ name:ME.name, id:ME.id, text, sys, ts:firebase.database.ServerValue.TIMESTAMP });
+}
+$('chatSend') && ($('chatSend').onclick=sendChat);
+$('chatText') && ($('chatText').addEventListener('keydown',e=>{ if(e.key==='Enter') sendChat(); }));
+function sendChat(){
+  const t=$('chatText').value.trim(); if(!t) return;
+  pushChat(t); $('chatText').value="";
+}
+function onChat(m){
+  const log=$('chatLog'); if(!log) return;
+  const div=document.createElement('div');
+  if(m.sys){ div.className='msg sys'; div.textContent=m.text; }
+  else{
+    div.className='msg '+(m.id===ME.id?'me':'them');
+    div.innerHTML=`<span class="who">${m.id===ME.id?'You':escapeHtml(m.name||'?')}</span>${escapeHtml(m.text)}`;
+  }
+  log.appendChild(div); log.scrollTop=log.scrollHeight;
+  if(!$('chatDrawer').classList.contains('open') && m.id!==ME.id){
+    unread++; const b=$('chatBadge'); b.textContent=unread; b.classList.remove('hidden');
+  }
+}
+function escapeHtml(s){ return (s+'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ==========================================================
+   DRAWERS / OVERLAY / TOAST
+   ========================================================== */
+$('chatOpen') && ($('chatOpen').onclick=()=>{ $('chatDrawer').classList.add('open'); unread=0; $('chatBadge').classList.add('hidden'); $('chatText').focus(); });
+$('scoreOpen')&& ($('scoreOpen').onclick=()=>$('scoreDrawer').classList.add('open'));
+document.querySelectorAll('.closex').forEach(b=>b.onclick=()=>$(b.dataset.close).classList.remove('open'));
+
+let toastT=null;
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),1600); }
+function showOverlay(){ $('overlay').classList.remove('hidden'); }
+function hideOverlay(){ $('overlay').classList.add('hidden'); }
+
+</script>
+</body>
+</html>

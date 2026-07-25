@@ -285,7 +285,7 @@ function renderHand(){ const h=ME.hand; if(!h) return;
     const sw=document.createElement('div'); sw.className='stackwrap'; sw.style.height=(pile.length?(pile.length-1)*20+74:74)+'px';
     pile.forEach((c,ci)=>{ const el=cardEl(c); el.classList.add('fan'); el.style.top=(ci*20)+'px';
       if(isSel('work',pi,ci))el.classList.add('sel');
-      bindTap(el,()=>selectCard('work',pi,ci),{stop:true,key:'w'+pi+'_'+ci,onDouble:()=>dblAuto('work',pi,ci)}); sw.appendChild(el); });
+      bindTap(el,()=>onWorkCardTap(pi,ci),{stop:true,key:'w'+pi+'_'+ci,onDouble:()=>dblAuto('work',pi,ci)}); sw.appendChild(el); });
     col.appendChild(sw); bindTap(col,()=>onWorkTap(pi),{key:'col'+pi}); wr.appendChild(col); });
   const np=$('nertsPile'); np.innerHTML='';
   if(h.nerts.length){ const el=cardEl(h.nerts[h.nerts.length-1]); if(isSel('nerts',0,h.nerts.length-1))el.classList.add('sel');
@@ -319,6 +319,12 @@ function onFoundationTap(i){ if(!selection) return; if(selection.cards.length!==
   removeFromHand(ME,selection); foundations[i]=(foundations[i]||[]); foundations[i].push({r:card.r,s:card.s,by:ME.id});
   ME.played++; ME.nertsCount=ME.hand.nerts.length; selection=null; renderAll(); checkOut(ME); }
 
+// Tapping a card inside a work pile: if you already have a card selected from
+// somewhere else, treat this as "drop it here"; otherwise select this card.
+function onWorkCardTap(pi,ci){
+  if(selection && !(selection.zone==='work' && selection.pile===pi)) onWorkTap(pi);
+  else selectCard('work',pi,ci);
+}
 function onWorkTap(pi){ if(!selection) return; const pile=ME.hand.work[pi];
   if(selection.zone==='work'&&selection.pile===pi){ selection=null; renderHand(); renderFoundations(); return; }
   if(!canWork(selection.cards,pile)){ toast("Can't stack there"); return; }

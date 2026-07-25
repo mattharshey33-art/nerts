@@ -43,6 +43,20 @@
   .opp{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.08);border-radius:20px;padding:3px 9px;}
   .opp .n{font-weight:700;}
   .opp .nz{background:#000;border-radius:10px;padding:0 6px;font-weight:800;font-size:11px;}
+  /* live opponent mini-boards */
+  .oppbox{background:rgba(255,255,255,.06);border-radius:10px;padding:5px 7px;transition:background .4s;}
+  .oppbox.acted{animation:oppflash .55s ease-out;}
+  @keyframes oppflash{0%{background:rgba(244,196,48,.4);}100%{background:rgba(255,255,255,.06);}}
+  .opphead{font-size:11px;margin-bottom:3px;display:flex;align-items:center;gap:6px;}
+  .opphead .nz{background:#000;border-radius:10px;padding:0 6px;font-weight:800;font-size:10px;}
+  .mini{display:flex;gap:3px;align-items:center;}
+  .minicell{width:24px;height:32px;border-radius:4px;background:#fff;color:#111;font-weight:800;font-size:11px;line-height:1;
+    display:flex;align-items:center;justify-content:center;position:relative;border:1px solid #ccc;flex:0 0 auto;}
+  .minicell.red{color:#d61f2b;}
+  .minicell.back{background:repeating-linear-gradient(45deg,#1e5aa8,#1e5aa8 4px,#2f74d0 4px,#2f74d0 8px);border-color:#14417a;}
+  .minicell.empty{background:rgba(255,255,255,.08);border:1px dashed rgba(255,255,255,.3);}
+  .minicell .mc{position:absolute;bottom:-2px;right:-2px;background:#000;color:#fff;font-size:9px;border-radius:6px;padding:0 3px;font-weight:800;}
+  .minigap{width:5px;flex:0 0 auto;}
 
   .board{flex:1;overflow:auto;padding:6px 8px 12px;}
   .zone-label{font-size:11px;text-transform:uppercase;letter-spacing:1px;opacity:.55;margin:4px 4px 4px;}
@@ -150,6 +164,7 @@
   <div class="hint" id="turnHint">Tap the stock to flip • tap a card then tap where it goes • double-tap to auto-play up top</div>
   <div class="controls">
     <button class="btn ghost" id="flipBtn">🔄 Flip Stock</button>
+    <button class="btn ghost" id="stuckBtn">😖 Stuck</button>
     <button class="btn red hidden" id="nertsBtn" style="font-size:18px;padding:12px 26px;">NERTS! 🎉</button>
   </div>
 </div>
@@ -213,6 +228,8 @@ let foundations=[];   // array of piles; each pile = [{r,s,by}]
 let SLOTS=12, TARGET=100, roundSeq=0, roundActive=false;
 let selection=null;   // {zone,pile,index,cards}
 let botTimer=null, botNext={};
+let lastActed=null, lastActedT=0;   // for highlighting the bot that just moved
+let stuckArmed=false;               // two-tap guard for the Stuck button
 const COLORS=['#ffd43b','#74c0fc','#ff8787','#63e6be'];
 
 // setup chips
@@ -246,7 +263,7 @@ function startRound(){
   foundations=Array.from({length:SLOTS},()=>null);
   players.forEach(p=>{ p.hand=dealHand(); p.played=0; p.nertsCount=13; });
   botNext={}; players.forEach(p=>{ if(p.isBot) botNext[p.id]=Date.now()+700+Math.random()*700; });
-  selection=null; $('nertsBtn').classList.add('hidden'); hideOverlay();
+  selection=null; stuckArmed=false; $('nertsBtn').classList.add('hidden'); hideOverlay();
   renderAll();
 }
 
@@ -261,10 +278,21 @@ function emptySlot(txt){ const e=document.createElement('div'); e.className='slo
 
 function renderAll(){ renderOpp(); renderFoundations(); renderHand(); renderScore(); }
 
+function miniCell(c){ if(!c) return '<div class="minicell empty"></div>';
+  return `<div class="minicell ${isRed(c.s)?'red':''}">${RANKS[c.r]}${SUITS[c.s]}</div>`; }
 function renderOpp(){ const bar=$('oppBar'); bar.innerHTML='';
-  players.filter(p=>p.isBot).forEach(p=>{ const d=document.createElement('div'); d.className='opp';
-    d.innerHTML=`<span class="n" style="color:${p.color}">${p.name}</span> <span class="nz">🂠 ${p.nertsCount}</span>`;
-    bar.appendChild(d); }); }
+  players.filter(p=>p.isBot).forEach(p=>{
+    const box=document.createElement('div');
+    box.className='oppbox'+(p.id===lastActed && (Date.now()-lastActedT<450)?' acted':'');
+    const head=`<div class="opphead"><span style="color:${p.color};font-weight:800">${p.name}</span><span class="nz">Nerts ${p.nertsCount}</span></div>`;
+    if(!p.hand){ box.innerHTML=head; bar.appendChild(box); return; }
+    let cells = p.hand.stock.length? `<div class="minicell back"><span class="mc">${p.hand.stock.length}</span></div>` : '<div class="minicell empty"></div>';
+    cells += miniCell(p.hand.waste[p.hand.waste.length-1]);
+    cells += '<div class="minigap"></div>';
+    for(let i=0;i<4;i++) cells += miniCell(p.hand.work[i][p.hand.work[i].length-1]);
+    box.innerHTML = head + `<div class="mini">${cells}</div>`;
+    bar.appendChild(box);
+  }); }
 
 function renderFoundations(){ const wrap=$('foundations'); wrap.innerHTML='';
   foundations.forEach((pile,i)=>{ let el;
@@ -343,7 +371,7 @@ function dblAuto(zone,pile,index){ const h=ME.hand; let card;
 
 function removeFromHand(p,sel){ if(sel.zone==='nerts') p.hand.nerts.pop(); else if(sel.zone==='waste') p.hand.waste.pop(); else p.hand.work[sel.pile].splice(sel.index); }
 
-function flipStock(){ const h=ME.hand; if(!h.stock.length&&!h.waste.length) return;
+function flipStock(){ const h=ME.hand; stuckArmed=false; if(!h.stock.length&&!h.waste.length) return;
   if(!h.stock.length){ h.stock=h.waste.reverse(); h.waste=[]; } else { const n=Math.min(3,h.stock.length); for(let i=0;i<n;i++) h.waste.push(h.stock.pop()); }
   selection=null; renderHand(); }
 bindTap($('flipBtn'),flipStock,{key:'flip'});
@@ -353,6 +381,7 @@ function botTick(){ if(!roundActive) return; const now=Date.now();
   players.forEach(p=>{ if(!p.isBot) return; if(now<(botNext[p.id]||0)) return;
     const diff=BOT_DIFF[p.diff]||BOT_DIFF.easy; const acted=botMove(p,diff);
     const gap=diff.min+Math.random()*(diff.max-diff.min); botNext[p.id]=now+(acted?gap:gap*0.6);
+    if(acted){ lastActed=p.id; lastActedT=now; renderOpp(); }  // show flips & plays live
     if(acted&&Math.random()<0.02) toast(p.name+": "+QUIPS[Math.floor(Math.random()*QUIPS.length)]); }); }
 
 function botMove(p,diff){ const h=p.hand; if(!h) return false; const top=a=>a[a.length-1];
@@ -376,7 +405,7 @@ function afterBot(p){ p.nertsCount=p.hand.nerts.length; renderOpp(); renderFound
 
 /* ---------- round end ---------- */
 function checkOut(p){ if(p.hand.nerts.length===0 && roundActive){ endRound(p); } }
-function endRound(caller){ roundActive=false; selection=null;
+function endRound(caller){ roundActive=false; selection=null;   // caller null = stuck/stalemate
   players.forEach(p=>{ const round=(p.played||0)-2*p.hand.nerts.length; p.lastRound=round; p.total+=round; });
   renderScore(); renderOpp();
   const winner=players.find(p=>p.total>=TARGET);
@@ -385,16 +414,38 @@ function endRound(caller){ roundActive=false; selection=null;
     body+=`<div style="margin:5px 0;"><span style="color:${p.color}">●</span> <b>${p.name}${p.isBot?' 🤖':''}</b>: ${p.total} <span style="opacity:.7">(${s}${p.lastRound})</span></div>`; });
   if(winner){ $('ovTitle').textContent='🏆 Game Over'; $('ovBig').textContent=(winner.id==='me'?'You win! 🎉':winner.name+' wins');
     $('ovBody').innerHTML=body; $('ovBtn').textContent='Play Again'; ovAction=()=>{ players.forEach(p=>p.total=0); startRound(); }; $('ovHint').textContent=''; }
-  else { $('ovTitle').textContent=(caller.id==='me'?'You went out! 🎉':caller.name+' went out!'); $('ovBig').textContent='Round Over';
+  else {
+    if(!caller){ $('ovTitle').textContent='😖 Stuck — nobody could move'; }
+    else { $('ovTitle').textContent=(caller.id==='me'?'You went out! 🎉':caller.name+' went out!'); }
+    $('ovBig').textContent='Round Over';
     $('ovBody').innerHTML=body; $('ovBtn').textContent='Next Round ▶'; ovAction=startRound;
     $('ovHint').textContent='Cards played to the center = +1 each. Cards left in your Nerts pile = −2 each.'; }
   showOverlay(); }
+
+// Does the human have any legal move right now (play up top, or build a work pile)?
+function humanHasMove(){ const h=ME.hand; if(!h) return false;
+  const tops=[]; if(h.nerts.length) tops.push(h.nerts[h.nerts.length-1]); if(h.waste.length) tops.push(h.waste[h.waste.length-1]);
+  h.work.forEach(p=>{ if(p.length) tops.push(p[p.length-1]); });
+  for(const c of tops){ for(let i=0;i<SLOTS;i++){ if(canFound(c,foundations[i])) return true; } }
+  // can any top card move onto a work pile?
+  const moveables=[]; if(h.nerts.length) moveables.push(h.nerts[h.nerts.length-1]); if(h.waste.length) moveables.push(h.waste[h.waste.length-1]);
+  h.work.forEach((p,pi)=>{ if(p.length) moveables.push(p[p.length-1]); });
+  for(const c of moveables){ for(let i=0;i<4;i++){ if(canWork([c],h.work[i])&&h.work[i][h.work[i].length-1]!==c) return true; } }
+  return false;
+}
 
 /* button bindings (pointer-based so they work in in-app viewers) */
 let ovAction=null;
 bindTap($('ovBtn'),()=>{ if(ovAction) ovAction(); },{key:'ovbtn'});
 bindTap($('nertsBtn'),()=>{ if(ME&&ME.hand.nerts.length===0) endRound(ME); },{key:'nertsbtn'});
 bindTap($('newBtn'),()=>{ $('game').classList.add('hidden'); $('setup').classList.remove('hidden'); clearInterval(botTimer); botTimer=null; },{key:'newbtn'});
+bindTap($('stuckBtn'),()=>{
+  if(!roundActive) return;
+  if(humanHasMove()){ stuckArmed=false; toast("You've still got a move — send a card up top or build a work pile."); return; }
+  const canFlip = ME.hand.stock.length>0 || ME.hand.waste.length>0;
+  if(canFlip && !stuckArmed){ stuckArmed=true; toast("No plays right now. Flip your stock to look — or tap Stuck again to end the round."); return; }
+  stuckArmed=false; endRound(null);   // truly stuck -> end the round, score as-is
+},{key:'stuckbtn'});
 
 /* ---------- drawers / toast / overlay ---------- */
 bindTap($('scoreOpen'),()=>$('scoreDrawer').classList.add('open'),{key:'scoreopen'});

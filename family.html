@@ -603,7 +603,7 @@ function renderHand(){
   hand.work.forEach((pile,pi)=>{
     const col=document.createElement('div'); col.className='workpile';
     if(!pile.length){ col.classList.add('empty'); }
-    if(selection && canDropWork(selection.cards, pile)) col.classList.add('target');
+    if(selection && canDropWork(selection.cards, pile, selection)) col.classList.add('target');
     const CH=82, MAXH=165;  // cap each pile's height so long stacks never need scrolling
     const OFF = pile.length>1 ? Math.min(26,(MAXH-CH)/(pile.length-1)) : 26;
     const wrapS=document.createElement('div'); wrapS.className='stackwrap';
@@ -666,11 +666,14 @@ function canPlayFoundation(card, pile){
   const top=pile[pile.length-1];
   return card.s===top.s && card.r===top.r+1;             // build up same suit
 }
-function canDropWork(cards, pile){
+function canDropWork(cards, pile, src){
   const c=cards[0];
   if(!pile || !pile.length) return true;                  // empty work accepts anything
   const top=pile[pile.length-1];
-  return c.r===top.r-1 && isRed(c.s)!==isRed(top.s);      // build down, alt color
+  if(isRed(c.s)===isRed(top.s)) return false;             // must be opposite color
+  if(c.r===top.r-1) return true;                          // build DOWN — any source
+  if(c.r===top.r+1 && src && (src.zone==='nerts'||src.zone==='work')) return true; // build UP — only from Nerts pile or a work-pile merge
+  return false;
 }
 
 // remove selected cards from their source (local)
@@ -706,7 +709,7 @@ function dropTargetAt(x,y){ let el=document.elementFromPoint(x,y);
 function clearDropHi(){ document.querySelectorAll('.drop-ok,.drop-no').forEach(e=>e.classList.remove('drop-ok','drop-no')); }
 function highlightDrop(x,y,src,cards){ clearDropHi(); const t=dropTargetAt(x,y); if(!t) return; let el,ok; const arr=foundationsArr();
   if(t.type==='found'){ el=document.querySelector('[data-found="'+t.i+'"]'); ok=cards.length===1&&canPlayFoundation(cards[0],arr[t.i]); }
-  else { el=document.querySelector('[data-work="'+t.i+'"]'); ok=!(src.zone==='work'&&src.pile===t.i)&&canDropWork(cards,hand.work[t.i]); }
+  else { el=document.querySelector('[data-work="'+t.i+'"]'); ok=!(src.zone==='work'&&src.pile===t.i)&&canDropWork(cards,hand.work[t.i],src); }
   if(el) el.classList.add(ok?'drop-ok':'drop-no'); }
 function resolveDrop(src,cards,x,y){ const t=dropTargetAt(x,y);
   if(!t){ renderMine(); return; }
@@ -714,7 +717,7 @@ function resolveDrop(src,cards,x,y){ const t=dropTargetAt(x,y);
     if(cards.length===1&&canPlayFoundation(cards[0],arr[t.i])) playToFoundation(t.i,cards[0],src);
     else { toast(cards.length>1?"Only single cards go up top":"Can't play there"); renderMine(); } }
   else { if(src.zone==='work'&&src.pile===t.i){ renderMine(); return; }
-    if(canDropWork(cards,hand.work[t.i])) moveWorkFrom(src,cards,t.i); else { toast("Can't stack there"); renderMine(); } } }
+    if(canDropWork(cards,hand.work[t.i],src)) moveWorkFrom(src,cards,t.i); else { toast("Can't stack there"); renderMine(); } } }
 function bindPlayable(el,o){ let down=false,dragging=false,x0=0,y0=0,cards=null;
   const start=e=>{ down=true; dragging=false; const p=e.touches?e.touches[0]:e; x0=p.clientX; y0=p.clientY;
     if(e.pointerId!==undefined&&el.setPointerCapture){ try{el.setPointerCapture(e.pointerId);}catch(_){}} };
@@ -739,7 +742,9 @@ function humanHasMove(){ const arr=foundationsArr();
   const tops=[]; if(hand.nerts.length) tops.push(hand.nerts[hand.nerts.length-1]); if(hand.waste.length) tops.push(hand.waste[hand.waste.length-1]);
   hand.work.forEach(p=>{ if(p.length) tops.push(p[p.length-1]); });
   for(const c of tops){ for(let i=0;i<arr.length;i++){ if(canPlayFoundation(c,arr[i])) return true; } }
-  for(const c of tops){ for(let i=0;i<4;i++){ const wp=hand.work[i]; if(canDropWork([c],wp)&&wp[wp.length-1]!==c) return true; } }
+  const moveables=[]; if(hand.nerts.length) moveables.push({c:hand.nerts[hand.nerts.length-1],src:{zone:'nerts'}}); if(hand.waste.length) moveables.push({c:hand.waste[hand.waste.length-1],src:{zone:'waste'}});
+  hand.work.forEach((p,pi)=>{ if(p.length) moveables.push({c:p[p.length-1],src:{zone:'work',pile:pi}}); });
+  for(const m of moveables){ for(let i=0;i<4;i++){ const wp=hand.work[i]; if(canDropWork([m.c],wp,m.src)&&wp[wp.length-1]!==m.c) return true; } }
   return false; }
 document.addEventListener('gesturestart',e=>e.preventDefault());  // block iOS pinch-zoom
 function cleanupOrphanDrag(){ if(dragGhost){ dragGhost.remove(); dragGhost=null; } isDragging=false; clearDropHi(); renderMine(); }
@@ -789,7 +794,7 @@ function onWorkTap(pi){
   if(!selection){ grabTop(pi); return; }
   if(selection.zone==='work' && selection.pile===pi){ extendRun(pi); return; }
   const pile=hand.work[pi];
-  if(!canDropWork(selection.cards, pile)){ toast("Can't stack there — build down in alternating colors"); return; }
+  if(!canDropWork(selection.cards, pile, selection)){ toast("Can't stack there"); return; }
   const cards=selection.cards.slice();
   removeSelected();
   hand.work[pi]=hand.work[pi].concat(cards);

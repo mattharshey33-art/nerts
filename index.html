@@ -325,7 +325,7 @@ function renderHand(){ if(isDragging) return; const h=ME.hand; if(!h) return;   
   else wp.appendChild(emptySlot(''));
   const wr=$('workRow'); wr.innerHTML='';
   h.work.forEach((pile,pi)=>{ const col=document.createElement('div'); col.className='workpile'+(pile.length?'':' empty');
-    if(selection&&canWork(selection.cards,pile)) col.classList.add('target');
+    if(selection&&canWork(selection.cards,pile,selection)) col.classList.add('target');
     const CH=74, MAXH=150;  // cap each pile's height so long stacks never need scrolling
     const OFF = pile.length>1 ? Math.min(26,(MAXH-CH)/(pile.length-1)) : 26;
     const sw=document.createElement('div'); sw.className='stackwrap'; sw.style.height=(pile.length?(pile.length-1)*OFF+CH:CH)+'px';
@@ -348,7 +348,11 @@ function renderScore(){ const list=$('scoreList'); list.innerHTML='';
 
 /* ---------- rules ---------- */
 function canFound(card,pile){ if(!pile||!pile.length) return card.r===1; const t=pile[pile.length-1]; return card.s===t.s&&card.r===t.r+1; }
-function canWork(cards,pile){ const c=cards[0]; if(!pile||!pile.length) return true; const t=pile[pile.length-1]; return c.r===t.r-1&&isRed(c.s)!==isRed(t.s); }
+function canWork(cards,pile,src){ const c=cards[0]; if(!pile||!pile.length) return true; const t=pile[pile.length-1];
+  if(isRed(c.s)===isRed(t.s)) return false;                 // must be opposite color
+  if(c.r===t.r-1) return true;                              // build DOWN — any source
+  if(c.r===t.r+1 && src && (src.zone==='nerts'||src.zone==='work')) return true; // build UP — only from Nerts pile or a work-pile merge
+  return false; }
 function validRun(run){ for(let i=0;i<run.length-1;i++){ const a=run[i],b=run[i+1]; if(!(b.r===a.r-1&&isRed(a.s)!==isRed(b.s))) return false; } return true; }
 
 /* ---------- human interaction ---------- */
@@ -386,7 +390,7 @@ function onWorkTap(pi){
   if(!selection){ grabTop(pi); return; }
   if(selection.zone==='work' && selection.pile===pi){ extendRun(pi); return; }
   const pile=ME.hand.work[pi];
-  if(!canWork(selection.cards,pile)){ toast("Can't stack there — build down in alternating colors"); return; }
+  if(!canWork(selection.cards,pile,selection)){ toast("Can't stack there"); return; }
   const cards=selection.cards.slice(); removeFromHand(ME,selection); ME.hand.work[pi]=ME.hand.work[pi].concat(cards);
   ME.nertsCount=ME.hand.nerts.length; selection=null; stuckArmed=false; renderAll(); checkOut(ME); }
 
@@ -417,14 +421,14 @@ function dropTargetAt(x,y){ let el=document.elementFromPoint(x,y);
 function clearDropHi(){ document.querySelectorAll('.drop-ok,.drop-no').forEach(e=>e.classList.remove('drop-ok','drop-no')); }
 function highlightDrop(x,y,src,cards){ clearDropHi(); const t=dropTargetAt(x,y); if(!t) return; let el,ok;
   if(t.type==='found'){ el=document.querySelector('[data-found="'+t.i+'"]'); ok=cards.length===1&&canFound(cards[0],foundations[t.i]); }
-  else { el=document.querySelector('[data-work="'+t.i+'"]'); ok=!(src.zone==='work'&&src.pile===t.i)&&canWork(cards,ME.hand.work[t.i]); }
+  else { el=document.querySelector('[data-work="'+t.i+'"]'); ok=!(src.zone==='work'&&src.pile===t.i)&&canWork(cards,ME.hand.work[t.i],src); }
   if(el) el.classList.add(ok?'drop-ok':'drop-no'); }
 function resolveDrop(src,cards,x,y){ const t=dropTargetAt(x,y);
   if(!t){ renderAll(); return; }
   if(t.type==='found'){ if(cards.length===1&&canFound(cards[0],foundations[t.i])) playFoundationFrom(src,cards[0],t.i);
     else { toast(cards.length>1?"Only single cards go up top":"Can't play there"); renderAll(); } }
   else { if(src.zone==='work'&&src.pile===t.i){ renderAll(); return; }
-    if(canWork(cards,ME.hand.work[t.i])) moveWorkFrom(src,cards,t.i); else { toast("Can't stack there"); renderAll(); } } }
+    if(canWork(cards,ME.hand.work[t.i],src)) moveWorkFrom(src,cards,t.i); else { toast("Can't stack there"); renderAll(); } } }
 function bindPlayable(el,o){ let down=false,dragging=false,x0=0,y0=0,cards=null;
   const start=e=>{ down=true; dragging=false; const p=e.touches?e.touches[0]:e; x0=p.clientX; y0=p.clientY;
     if(e.pointerId!==undefined&&el.setPointerCapture){ try{el.setPointerCapture(e.pointerId);}catch(_){}} };
@@ -509,10 +513,10 @@ function humanHasMove(){ const h=ME.hand; if(!h) return false;
   const tops=[]; if(h.nerts.length) tops.push(h.nerts[h.nerts.length-1]); if(h.waste.length) tops.push(h.waste[h.waste.length-1]);
   h.work.forEach(p=>{ if(p.length) tops.push(p[p.length-1]); });
   for(const c of tops){ for(let i=0;i<SLOTS;i++){ if(canFound(c,foundations[i])) return true; } }
-  // can any top card move onto a work pile?
-  const moveables=[]; if(h.nerts.length) moveables.push(h.nerts[h.nerts.length-1]); if(h.waste.length) moveables.push(h.waste[h.waste.length-1]);
-  h.work.forEach((p,pi)=>{ if(p.length) moveables.push(p[p.length-1]); });
-  for(const c of moveables){ for(let i=0;i<4;i++){ if(canWork([c],h.work[i])&&h.work[i][h.work[i].length-1]!==c) return true; } }
+  // can any top card move onto a work pile? (respect the source-specific up/down rules)
+  const moveables=[]; if(h.nerts.length) moveables.push({c:h.nerts[h.nerts.length-1],src:{zone:'nerts'}}); if(h.waste.length) moveables.push({c:h.waste[h.waste.length-1],src:{zone:'waste'}});
+  h.work.forEach((p,pi)=>{ if(p.length) moveables.push({c:p[p.length-1],src:{zone:'work',pile:pi}}); });
+  for(const m of moveables){ for(let i=0;i<4;i++){ if(canWork([m.c],h.work[i],m.src)&&h.work[i][h.work[i].length-1]!==m.c) return true; } }
   return false;
 }
 

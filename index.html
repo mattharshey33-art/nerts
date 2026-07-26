@@ -326,7 +326,9 @@ function renderHand(){ if(isDragging) return; const h=ME.hand; if(!h) return;   
   const wr=$('workRow'); wr.innerHTML='';
   h.work.forEach((pile,pi)=>{ const col=document.createElement('div'); col.className='workpile'+(pile.length?'':' empty');
     if(selection&&canWork(selection.cards,pile)) col.classList.add('target');
-    const OFF=26; const sw=document.createElement('div'); sw.className='stackwrap'; sw.style.height=(pile.length?(pile.length-1)*OFF+74:74)+'px';
+    const CH=74, MAXH=150;  // cap each pile's height so long stacks never need scrolling
+    const OFF = pile.length>1 ? Math.min(26,(MAXH-CH)/(pile.length-1)) : 26;
+    const sw=document.createElement('div'); sw.className='stackwrap'; sw.style.height=(pile.length?(pile.length-1)*OFF+CH:CH)+'px';
     pile.forEach((c,ci)=>{ const el=cardEl(c); el.classList.add('fan'); el.style.top=(ci*OFF)+'px';
       if(selection&&selection.zone==='work'&&selection.pile===pi&&ci>=selection.index) el.classList.add('sel');
       bindPlayable(el,{src:{zone:'work',pile:pi,index:ci}, getCards:()=>workDragCards(pi,ci), tap:()=>onWorkCardTap(pi,ci), stop:true, key:'w'+pi+'_'+ci}); sw.appendChild(el); });

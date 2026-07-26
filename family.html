@@ -10,12 +10,18 @@
     --panel:#ffffff; --shadow:rgba(0,0,0,.35);
     --card-w:58px; --card-h:82px; --radius:9px;
   }
-  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-touch-callout:none;}
+  html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;touch-action:manipulation;}
   body{
     background:radial-gradient(circle at 50% 15%,var(--felt) 0%,var(--felt2) 70%);
-    color:#fff; overflow:hidden; user-select:none;
+    color:#fff; overflow:hidden; user-select:none; -webkit-user-select:none; touch-action:manipulation;
   }
+  /* cards use touch-action:none so custom drag works without the page scrolling/zooming */
+  .card{cursor:grab;touch-action:none;}
+  .card:active{cursor:grabbing;}
+  .dragghost{position:fixed;pointer-events:none;z-index:9999;opacity:.94;transform:translate(-50%,-24%);filter:drop-shadow(0 6px 10px rgba(0,0,0,.5));}
+  .drop-ok{box-shadow:0 0 0 3px #63e6be !important;border-radius:var(--radius);}
+  .drop-no{box-shadow:0 0 0 3px #e63946 !important;border-radius:var(--radius);}
   button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;}
   .btn{background:var(--gold);color:#3a2c00;padding:10px 16px;font-size:15px;box-shadow:0 2px 0 #b8901d;}
   .btn:active{transform:translateY(1px);box-shadow:0 1px 0 #b8901d;}
@@ -58,7 +64,7 @@
   .codebox{text-align:center;font-size:34px;font-weight:900;letter-spacing:8px;color:var(--gold);margin:6px 0;}
 
   /* ---------- Game board ---------- */
-  #game{position:absolute;inset:0;display:flex;flex-direction:column;}
+  #game{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:680px;display:flex;flex-direction:column;box-shadow:0 0 60px rgba(0,0,0,.35);}
   .topbar{display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(0,0,0,.25);}
   .topbar .rc{font-weight:800;letter-spacing:2px;font-size:14px;}
   .topbar .rc b{color:var(--gold);}
@@ -85,13 +91,14 @@
   .stackwrap{position:relative;}
 
   /* Card visuals */
-  .card{width:var(--card-w);height:var(--card-h);border-radius:var(--radius);background:#fff;color:#111;
+  .card{width:var(--card-w);height:var(--card-h);border-radius:var(--radius);background:#fff;color:#000;
     position:relative;box-shadow:0 1px 3px rgba(0,0,0,.4);display:flex;flex-direction:column;justify-content:space-between;
-    padding:4px 5px;font-weight:800;border:1px solid #d9d9d9;}
+    padding:4px 5px;font-weight:900;border:1px solid #d9d9d9;}
   .card.red{color:#d61f2b;}
-  .card .tl{font-size:15px;line-height:1;}
-  .card .br{font-size:15px;line-height:1;align-self:flex-end;transform:rotate(180deg);}
-  .card .pip{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:26px;opacity:.9;}
+  .card .tl{font-size:16px;line-height:1.05;}
+  .card .br{font-size:16px;line-height:1.05;align-self:flex-end;transform:rotate(180deg);}
+  /* bigger, full-contrast center pip so spades & clubs are easy to read */
+  .card .pip{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:34px;opacity:1;line-height:1;}
   .card.back{background:repeating-linear-gradient(45deg,#1e5aa8,#1e5aa8 6px,#2f74d0 6px,#2f74d0 12px);
     border:1px solid #14417a;}
   .card.sel{outline:3px solid var(--gold);outline-offset:1px;transform:translateY(-6px);z-index:5;}
@@ -211,6 +218,7 @@
 <div id="game" class="hidden">
   <div class="topbar">
     <div class="rc">Room <b id="gameCode">----</b></div>
+    <span class="iconbtn" id="timer" style="pointer-events:none;padding:6px 9px;">⏱ 0:00</span>
     <div class="spacer"></div>
     <button class="iconbtn" id="scoreOpen">🏆 <span id="topScore">0</span></button>
     <button class="iconbtn" id="chatOpen">💬<span class="badge hidden" id="chatBadge">0</span></button>
@@ -241,9 +249,10 @@
     </div>
   </div>
 
-  <div class="hint" id="turnHint">Tap the stock to flip • tap a card to select, then tap where it goes • double-tap to auto-play up top</div>
+  <div class="hint" id="turnHint">Drag a card where it goes, or tap a pile to grab its top card (tap again to grab more) • double-tap Nerts/Waste to send a card up top</div>
   <div class="controls">
     <button class="btn ghost" id="flipBtn">🔄 Flip Stock</button>
+    <button class="btn ghost" id="stuckBtn">😖 Stuck</button>
     <button class="btn red nerts-btn hidden" id="nertsBtn">NERTS! 🎉</button>
   </div>
 </div>
@@ -326,6 +335,10 @@ let dealtSeq = -1;
 let selection = null;   // {zone, pile, index, cards:[]}
 let unread = 0;
 let FOUNDATION_SLOTS = 12;
+let stuckArmed=false;
+let gameStartTs=0, timerInt=null;
+let _lastKey=null,_lastT=0;   // tap/double-tap tracking
+const DRAG_THRESH=8; let dragGhost=null;
 
 // ---- bot engine state (bots run inside the HOST's browser) ----
 let botHands = {};       // botId -> {nerts,work,stock,waste}
@@ -501,9 +514,9 @@ function onRound(){
     $('nertsBtn').classList.add('hidden');
     hideOverlay();
   }
-  if(r.status==='playing') maybeDealBots(seq);
+  if(r.status==='playing'){ maybeDealBots(seq); startTimer(); }
   if(r.status==='roundover'){ handleRoundOver(); }
-  if(r.status==='gameover'){ handleGameOver(); }
+  if(r.status==='gameover'){ stopTimer(); handleGameOver(); }
   renderFoundations();
   renderHand();
 }
@@ -560,7 +573,7 @@ function renderFoundations(){
       el.classList.add('target');
       if(pile&&pile.length) el.classList.add('sel');
     }
-    el.onclick=()=>onFoundationTap(i);
+    el.dataset.found=i; bindTap(el,()=>onFoundationTap(i),{key:'f'+i});
     wrap.appendChild(el);
   });
 }
@@ -569,10 +582,11 @@ function renderFoundations(){
    RENDER: MY HAND
    ========================================================== */
 function renderHand(){
+  if(isDragging) return;   // don't rebuild your hand mid-drag (would orphan the dragged card)
   // stock
   const sp=$('stockPile'); sp.innerHTML="";
   const sEl = hand.stock.length? backEl(hand.stock.length) : emptySlot('↻');
-  sEl.onclick=flipStock; sp.appendChild(sEl);
+  bindTap(sEl,flipStock,{key:'stock'}); sp.appendChild(sEl);
 
   // waste
   const wp=$('wastePile'); wp.innerHTML="";
@@ -580,8 +594,7 @@ function renderHand(){
     const top=hand.waste[hand.waste.length-1];
     const el=cardEl(top,{extra:'playable'});
     if(isSel('waste',0,hand.waste.length-1)) el.classList.add('sel');
-    el.onclick=()=>selectCard('waste',0,hand.waste.length-1);
-    el.ondblclick=()=>dblAuto('waste',0);
+    bindPlayable(el,{src:{zone:'waste'}, getCards:()=>hand.waste.length?[hand.waste[hand.waste.length-1]]:[], tap:()=>selectCard('waste',0,hand.waste.length-1), onDouble:()=>dblAuto('waste',0), key:'waste'});
     wp.appendChild(el);
   } else wp.appendChild(emptySlot(''));
 
@@ -591,20 +604,19 @@ function renderHand(){
     const col=document.createElement('div'); col.className='workpile';
     if(!pile.length){ col.classList.add('empty'); }
     if(selection && canDropWork(selection.cards, pile)) col.classList.add('target');
+    const CH=82, MAXH=165;  // cap each pile's height so long stacks never need scrolling
+    const OFF = pile.length>1 ? Math.min(26,(MAXH-CH)/(pile.length-1)) : 26;
     const wrapS=document.createElement('div'); wrapS.className='stackwrap';
-    wrapS.style.height=(pile.length? (pile.length-1)*22 + 82 : 82)+'px';
+    wrapS.style.height=(pile.length? (pile.length-1)*OFF + CH : CH)+'px';
     pile.forEach((c,ci)=>{
       const el=cardEl(c,{extra:'playable'});
-      el.classList.add('fan'); el.style.top=(ci*22)+'px';
-      if(isSel('work',pi,ci)) el.classList.add('sel');
-      el.onclick=(ev)=>{ ev.stopPropagation();
-        if(selection && !(selection.zone==='work' && selection.pile===pi)) onWorkTap(pi);
-        else selectCard('work',pi,ci); };
-      el.ondblclick=(ev)=>{ ev.stopPropagation(); dblAuto('work',pi,ci); };
+      el.classList.add('fan'); el.style.top=(ci*OFF)+'px';
+      if(selection&&selection.zone==='work'&&selection.pile===pi&&ci>=selection.index) el.classList.add('sel');
+      bindPlayable(el,{src:{zone:'work',pile:pi,index:ci}, getCards:()=>workDragCards(pi,ci), tap:()=>onWorkCardTap(pi,ci), stop:true, key:'w'+pi+'_'+ci});
       wrapS.appendChild(el);
     });
-    col.appendChild(wrapS);
-    col.onclick=()=>onWorkTap(pi);
+    col.dataset.work=pi; col.appendChild(wrapS);
+    bindTap(col,()=>onWorkTap(pi),{key:'col'+pi});
     wr.appendChild(col);
   });
 
@@ -615,8 +627,7 @@ function renderHand(){
     const el=cardEl(top,{extra:'playable'});
     if(isSel('nerts',0,hand.nerts.length-1)) el.classList.add('sel');
     const cnt=document.createElement('div'); cnt.className='pilecount'; cnt.textContent=hand.nerts.length; el.appendChild(cnt);
-    el.onclick=()=>selectCard('nerts',0,hand.nerts.length-1);
-    el.ondblclick=()=>dblAuto('nerts',0);
+    bindPlayable(el,{src:{zone:'nerts'}, getCards:()=>hand.nerts.length?[hand.nerts[hand.nerts.length-1]]:[], tap:()=>selectCard('nerts',0,hand.nerts.length-1), onDouble:()=>dblAuto('nerts',0), key:'nerts'});
     np.appendChild(el);
   } else {
     np.appendChild(emptySlot('✓'));
@@ -670,6 +681,71 @@ function removeSelected(s){
   else hand.work[s.pile].splice(s.index);
 }
 
+/* ==========================================================
+   INPUT: tap + drag engine (mouse on laptops, touch on phones)
+   ========================================================== */
+let isDragging=false;
+function renderMine(){ renderFoundations(); renderHand(); }
+function bindTap(el, fn, opts){ opts=opts||{};
+  let down=false,moved=false,sx=0,sy=0;
+  const start=e=>{ down=true;moved=false; const p=e.touches?e.touches[0]:e; sx=p.clientX;sy=p.clientY; };
+  const move=e=>{ if(!down)return; const p=e.touches?e.touches[0]:e; if(Math.abs(p.clientX-sx)>12||Math.abs(p.clientY-sy)>12) moved=true; };
+  const end=e=>{ if(!down)return; down=false; if(moved)return;
+    if(opts.stop && e.stopPropagation) e.stopPropagation(); if(e.cancelable) e.preventDefault();
+    fn(e); };
+  if(window.PointerEvent){ el.addEventListener('pointerdown',start); el.addEventListener('pointermove',move); el.addEventListener('pointerup',end); el.addEventListener('pointercancel',()=>down=false); }
+  else { el.addEventListener('touchstart',start,{passive:true}); el.addEventListener('touchmove',move,{passive:true}); el.addEventListener('touchend',end); el.addEventListener('click',e=>{ if(opts.stop)e.stopPropagation(); fn(e); }); } }
+function workDragCards(pi,ci){ const p=hand.work[pi]; const run=p.slice(ci); if(run.length<=1) return run; return validRun(run)?run:(ci===p.length-1?[p[p.length-1]]:[]); }
+function moveWorkFrom(src,cards,destPi){ removeSelected(src); hand.work[destPi]=hand.work[destPi].concat(cards);
+  selection=null; stuckArmed=false; persistHand(dealtSeq); renderMine(); checkNerts(); }
+function makeGhost(cards,x,y){ const g=document.createElement('div'); g.className='dragghost';
+  cards.forEach((c,i)=>{ const cc=cardEl(c); cc.style.position='absolute'; cc.style.left='0'; cc.style.top=(i*26)+'px'; g.appendChild(cc); });
+  g.style.left=x+'px'; g.style.top=y+'px'; document.body.appendChild(g); return g; }
+function dropTargetAt(x,y){ let el=document.elementFromPoint(x,y);
+  while(el){ if(el.dataset){ if(el.dataset.found!==undefined) return {type:'found',i:+el.dataset.found}; if(el.dataset.work!==undefined) return {type:'work',i:+el.dataset.work}; } el=el.parentElement; } return null; }
+function clearDropHi(){ document.querySelectorAll('.drop-ok,.drop-no').forEach(e=>e.classList.remove('drop-ok','drop-no')); }
+function highlightDrop(x,y,src,cards){ clearDropHi(); const t=dropTargetAt(x,y); if(!t) return; let el,ok; const arr=foundationsArr();
+  if(t.type==='found'){ el=document.querySelector('[data-found="'+t.i+'"]'); ok=cards.length===1&&canPlayFoundation(cards[0],arr[t.i]); }
+  else { el=document.querySelector('[data-work="'+t.i+'"]'); ok=!(src.zone==='work'&&src.pile===t.i)&&canDropWork(cards,hand.work[t.i]); }
+  if(el) el.classList.add(ok?'drop-ok':'drop-no'); }
+function resolveDrop(src,cards,x,y){ const t=dropTargetAt(x,y);
+  if(!t){ renderMine(); return; }
+  if(t.type==='found'){ const arr=foundationsArr();
+    if(cards.length===1&&canPlayFoundation(cards[0],arr[t.i])) playToFoundation(t.i,cards[0],src);
+    else { toast(cards.length>1?"Only single cards go up top":"Can't play there"); renderMine(); } }
+  else { if(src.zone==='work'&&src.pile===t.i){ renderMine(); return; }
+    if(canDropWork(cards,hand.work[t.i])) moveWorkFrom(src,cards,t.i); else { toast("Can't stack there"); renderMine(); } } }
+function bindPlayable(el,o){ let down=false,dragging=false,x0=0,y0=0,cards=null;
+  const start=e=>{ down=true; dragging=false; const p=e.touches?e.touches[0]:e; x0=p.clientX; y0=p.clientY;
+    if(e.pointerId!==undefined&&el.setPointerCapture){ try{el.setPointerCapture(e.pointerId);}catch(_){}} };
+  const move=e=>{ if(!down) return; const p=e.touches?e.touches[0]:e;
+    if(!dragging&&(Math.abs(p.clientX-x0)>DRAG_THRESH||Math.abs(p.clientY-y0)>DRAG_THRESH)){
+      cards=o.getCards?o.getCards():null;
+      if(!cards||!cards.length){ down=false; toast("Not a movable run"); return; }
+      dragging=true; isDragging=true; selection=null; dragGhost=makeGhost(cards,p.clientX,p.clientY); }
+    if(dragging){ if(e.cancelable)e.preventDefault(); dragGhost.style.left=p.clientX+'px'; dragGhost.style.top=p.clientY+'px'; highlightDrop(p.clientX,p.clientY,o.src,cards); } };
+  const end=e=>{ if(!down) return; down=false;
+    if(dragging){ dragging=false; isDragging=false; const p=e.changedTouches?e.changedTouches[0]:e;
+      if(dragGhost){ dragGhost.remove(); dragGhost=null; } clearDropHi();
+      resolveDrop(o.src,cards,p.clientX,p.clientY); cards=null; return; }
+    if(o.stop&&e.stopPropagation) e.stopPropagation();
+    const now=Date.now();
+    if(o.onDouble&&_lastKey===o.key&&now-_lastT<340){ _lastKey=null;_lastT=0; o.onDouble(); return; }
+    _lastKey=o.key||null; _lastT=now; o.tap(); };
+  const cancel=()=>{ down=false; dragging=false; isDragging=false; if(dragGhost){dragGhost.remove();dragGhost=null;} clearDropHi(); renderMine(); };
+  if(window.PointerEvent){ el.addEventListener('pointerdown',start); el.addEventListener('pointermove',move); el.addEventListener('pointerup',end); el.addEventListener('pointercancel',cancel); }
+  else { el.addEventListener('touchstart',start,{passive:true}); el.addEventListener('touchmove',move,{passive:false}); el.addEventListener('touchend',end); } }
+function humanHasMove(){ const arr=foundationsArr();
+  const tops=[]; if(hand.nerts.length) tops.push(hand.nerts[hand.nerts.length-1]); if(hand.waste.length) tops.push(hand.waste[hand.waste.length-1]);
+  hand.work.forEach(p=>{ if(p.length) tops.push(p[p.length-1]); });
+  for(const c of tops){ for(let i=0;i<arr.length;i++){ if(canPlayFoundation(c,arr[i])) return true; } }
+  for(const c of tops){ for(let i=0;i<4;i++){ const wp=hand.work[i]; if(canDropWork([c],wp)&&wp[wp.length-1]!==c) return true; } }
+  return false; }
+document.addEventListener('gesturestart',e=>e.preventDefault());  // block iOS pinch-zoom
+function cleanupOrphanDrag(){ if(dragGhost){ dragGhost.remove(); dragGhost=null; } isDragging=false; clearDropHi(); renderMine(); }
+window.addEventListener('pointerup', ()=>{ if(dragGhost) setTimeout(()=>{ if(dragGhost) cleanupOrphanDrag(); },30); });
+window.addEventListener('pointercancel', ()=>{ if(dragGhost) cleanupOrphanDrag(); });
+
 function onFoundationTap(i){
   if(!selection){ return; }
   if(selection.cards.length!==1){ toast("Only single cards go up top"); return; }
@@ -679,8 +755,8 @@ function onFoundationTap(i){
   playToFoundation(i, card);
 }
 
-function playToFoundation(slot, card){
-  const src=selection;
+function playToFoundation(slot, card, srcArg){
+  const src=srcArg||selection;
   roomRef.child('round/foundations/'+slot).transaction(pile=>{
     pile=pile||[];
     const ok = pile.length ? (card.s===pile[pile.length-1].s && card.r===pile[pile.length-1].r+1)
@@ -699,15 +775,25 @@ function playToFoundation(slot, card){
   });
 }
 
+/* Work pile pick-up (tap top, tap again to grab more of the run; tap elsewhere to drop) */
+function grabTop(pi){ const p=hand.work[pi]; if(!p.length){ toast("That pile is empty"); return; }
+  selection={zone:'work',pile:pi,index:p.length-1,cards:[p[p.length-1]]}; renderFoundations(); renderHand(); }
+function extendRun(pi){ const p=hand.work[pi]; const start=selection.index;
+  if(start>0){ const cand=p.slice(start-1); if(validRun(cand)){ selection.index=start-1; selection.cards=cand; toast("Holding "+cand.length+" cards"); renderFoundations(); renderHand(); return; } }
+  grabTop(pi); toast("Back to 1 card"); }
+function onWorkCardTap(pi,ci){
+  if(selection && !(selection.zone==='work' && selection.pile===pi)){ onWorkTap(pi); return; }
+  if(selection && selection.zone==='work' && selection.pile===pi){ extendRun(pi); return; }
+  grabTop(pi); }
 function onWorkTap(pi){
-  if(!selection) return;
+  if(!selection){ grabTop(pi); return; }
+  if(selection.zone==='work' && selection.pile===pi){ extendRun(pi); return; }
   const pile=hand.work[pi];
-  if(selection.zone==='work' && selection.pile===pi) { selection=null; renderHand(); renderFoundations(); return; }
-  if(!canDropWork(selection.cards, pile)){ toast("Can't stack there"); return; }
+  if(!canDropWork(selection.cards, pile)){ toast("Can't stack there — build down in alternating colors"); return; }
   const cards=selection.cards.slice();
   removeSelected();
   hand.work[pi]=hand.work[pi].concat(cards);
-  selection=null;
+  selection=null; stuckArmed=false;
   persistHand(dealtSeq); renderHand(); renderFoundations();
   checkNerts();
 }
@@ -728,6 +814,7 @@ function dblAuto(zone,pile,index){
 }
 
 function flipStock(){
+  stuckArmed=false;
   if(!hand.stock.length && !hand.waste.length) return;
   if(!hand.stock.length){ // recycle waste
     hand.stock=hand.waste.reverse(); hand.waste=[];
@@ -755,6 +842,20 @@ function checkNerts(){
   }
 }
 $('nertsBtn') && ($('nertsBtn').onclick=callNerts);
+$('stuckBtn') && ($('stuckBtn').onclick=()=>{
+  if((pub.round.status)!=='playing') return;
+  if(humanHasMove()){ stuckArmed=false; toast("You've still got a move — play up top or build a pile."); return; }
+  const canFlip = hand.stock.length>0 || hand.waste.length>0;
+  if(canFlip && !stuckArmed){ stuckArmed=true; toast("No plays right now. Flip your stock — or tap Stuck again to end the round."); return; }
+  stuckArmed=false;
+  roomRef.child('round').update({ status:'roundover', nertsBy:null });
+  pushChat(ME.name+" got stuck — round over 😖", true);
+});
+// ---- game timer ----
+function fmtTime(ms){ const s=Math.max(0,Math.floor(ms/1000)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+function startTimer(){ if(timerInt) return; gameStartTs=Date.now();
+  $('timer').textContent='⏱ 0:00'; timerInt=setInterval(()=>{ $('timer').textContent='⏱ '+fmtTime(Date.now()-gameStartTs); },500); }
+function stopTimer(){ if(timerInt){ clearInterval(timerInt); timerInt=null; } }
 function callNerts(){
   if((pub.round.status)!=='playing') return;
   roomRef.child('round').update({ status:'roundover', nertsBy:ME.id });
@@ -837,7 +938,7 @@ function evaluateWinnerAndShow(){
     const sign=v.last>=0?'+':'';
     body+=`<div style="margin:6px 0;"><span class="dot t${k}"></span><b>Team ${k}</b>: ${v.total} <span style="opacity:.7">(${sign}${v.last} this round)</span></div>`;
   });
-  $('ovTitle').textContent=nertsName+" went out!";
+  $('ovTitle').textContent = pub.round.nertsBy ? (nertsName+" went out!") : "😖 Stuck — round over";
   $('ovBig').textContent="Round Over";
   $('ovBody').innerHTML=body;
   const amHost=pub.meta.host===ME.id;

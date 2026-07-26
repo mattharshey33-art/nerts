@@ -670,10 +670,7 @@ function canDropWork(cards, pile, src){
   const c=cards[0];
   if(!pile || !pile.length) return true;                  // empty work accepts anything
   const top=pile[pile.length-1];
-  if(isRed(c.s)===isRed(top.s)) return false;             // must be opposite color
-  if(c.r===top.r-1) return true;                          // build DOWN — any source
-  if(c.r===top.r+1 && src && (src.zone==='nerts'||src.zone==='work')) return true; // build UP — only from Nerts pile or a work-pile merge
-  return false;
+  return c.r===top.r-1 && isRed(c.s)!==isRed(top.s);      // build DOWN only, alternating colors
 }
 
 // remove selected cards from their source (local)

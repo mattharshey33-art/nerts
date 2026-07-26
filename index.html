@@ -52,20 +52,23 @@
   .opp{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.08);border-radius:20px;padding:3px 9px;}
   .opp .n{font-weight:700;}
   .opp .nz{background:#000;border-radius:10px;padding:0 6px;font-weight:800;font-size:11px;}
+  /* table layout: CPU players seated left & right around the center */
+  .tabletop{display:flex;gap:5px;align-items:flex-start;padding:4px 3px 2px;}
+  .side{display:flex;flex-direction:column;gap:8px;flex:0 0 auto;}
+  .center{flex:1 1 auto;min-width:0;}
   /* live opponent mini-boards */
-  .oppbox{background:rgba(255,255,255,.06);border-radius:10px;padding:5px 7px;transition:background .4s;}
+  .oppbox{background:rgba(255,255,255,.06);border-radius:9px;padding:5px;transition:background .4s;}
   .oppbox.acted{animation:oppflash .55s ease-out;}
-  @keyframes oppflash{0%{background:rgba(244,196,48,.4);}100%{background:rgba(255,255,255,.06);}}
-  .opphead{font-size:11px;margin-bottom:3px;display:flex;align-items:center;gap:6px;}
-  .opphead .nz{background:#000;border-radius:10px;padding:0 6px;font-weight:800;font-size:10px;}
-  .mini{display:flex;gap:3px;align-items:center;}
-  .minicell{width:26px;height:34px;border-radius:4px;background:#fff;color:#000;font-weight:900;font-size:13px;line-height:1;
-    display:flex;align-items:center;justify-content:center;position:relative;border:1px solid #ccc;flex:0 0 auto;}
+  @keyframes oppflash{0%{background:rgba(244,196,48,.45);}100%{background:rgba(255,255,255,.06);}}
+  .opphead{font-size:10px;margin-bottom:4px;display:flex;flex-direction:column;gap:1px;line-height:1.1;}
+  .opphead .nz{background:#000;border-radius:8px;padding:0 5px;font-weight:800;font-size:9px;align-self:flex-start;}
+  .mini{display:grid;grid-template-columns:repeat(2,1fr);gap:3px;}
+  .minicell{width:24px;height:31px;border-radius:4px;background:#fff;color:#000;font-weight:900;font-size:12px;line-height:1;
+    display:flex;align-items:center;justify-content:center;position:relative;border:1px solid #ccc;}
   .minicell.red{color:#d61f2b;}
   .minicell.back{background:repeating-linear-gradient(45deg,#1e5aa8,#1e5aa8 4px,#2f74d0 4px,#2f74d0 8px);border-color:#14417a;}
   .minicell.empty{background:rgba(255,255,255,.08);border:1px dashed rgba(255,255,255,.3);}
   .minicell .mc{position:absolute;bottom:-2px;right:-2px;background:#000;color:#fff;font-size:9px;border-radius:6px;padding:0 3px;font-weight:800;}
-  .minigap{width:5px;flex:0 0 auto;}
 
   .board{flex:1;overflow:auto;padding:6px 8px 12px;}
   .zone-label{font-size:11px;text-transform:uppercase;letter-spacing:1px;opacity:.55;margin:4px 4px 4px;}
@@ -158,11 +161,15 @@
     <button class="iconbtn" id="scoreOpen">🏆 <span id="topScore">0</span>/<span id="topTarget">100</span></button>
     <button class="iconbtn" id="newBtn">↺ New</button>
   </div>
-  <div class="oppbar" id="oppBar"></div>
-
   <div class="board">
-    <div class="zone-label">Center foundations — build up A→K by suit (yours & the bots')</div>
-    <div class="foundations" id="foundations"></div>
+    <div class="tabletop">
+      <div class="side" id="sideLeft"></div>
+      <div class="center">
+        <div class="zone-label" style="text-align:center;">Center — build A→K by suit</div>
+        <div class="foundations" id="foundations"></div>
+      </div>
+      <div class="side" id="sideRight"></div>
+    </div>
     <div class="zone-label">Your cards</div>
     <div class="myarea">
       <div class="pilecol"><div class="cap">Stock</div><div id="stockPile"></div></div>
@@ -296,18 +303,19 @@ function renderAll(){ renderOpp(); renderFoundations(); renderHand(); renderScor
 
 function miniCell(c){ if(!c) return '<div class="minicell empty"></div>';
   return `<div class="minicell ${isRed(c.s)?'red':''}">${RANKS[c.r]}${SUITS[c.s]}</div>`; }
-function renderOpp(){ const bar=$('oppBar'); bar.innerHTML='';
-  players.filter(p=>p.isBot).forEach(p=>{
+function renderOpp(){ const L=$('sideLeft'), R=$('sideRight'); if(!L||!R) return; L.innerHTML=''; R.innerHTML='';
+  players.filter(p=>p.isBot).forEach((p,idx)=>{
     const box=document.createElement('div');
     box.className='oppbox'+(p.id===lastActed && (Date.now()-lastActedT<450)?' acted':'');
     const head=`<div class="opphead"><span style="color:${p.color};font-weight:800">${p.name}</span><span class="nz">Nerts ${p.nertsCount}</span></div>`;
-    if(!p.hand){ box.innerHTML=head; bar.appendChild(box); return; }
-    let cells = p.hand.stock.length? `<div class="minicell back"><span class="mc">${p.hand.stock.length}</span></div>` : '<div class="minicell empty"></div>';
-    cells += miniCell(p.hand.waste[p.hand.waste.length-1]);
-    cells += '<div class="minigap"></div>';
-    for(let i=0;i<4;i++) cells += miniCell(p.hand.work[i][p.hand.work[i].length-1]);
-    box.innerHTML = head + `<div class="mini">${cells}</div>`;
-    bar.appendChild(box);
+    if(!p.hand){ box.innerHTML=head; }
+    else {
+      let cells = p.hand.stock.length? `<div class="minicell back"><span class="mc">${p.hand.stock.length}</span></div>` : '<div class="minicell empty"></div>';
+      cells += miniCell(p.hand.waste[p.hand.waste.length-1]);
+      for(let i=0;i<4;i++) cells += miniCell(p.hand.work[i][p.hand.work[i].length-1]);
+      box.innerHTML = head + `<div class="mini">${cells}</div>`;
+    }
+    (idx%2===0 ? L : R).appendChild(box);   // seat bots alternately on left / right
   }); }
 
 function renderFoundations(){ const wrap=$('foundations'); wrap.innerHTML='';
@@ -349,10 +357,7 @@ function renderScore(){ const list=$('scoreList'); list.innerHTML='';
 /* ---------- rules ---------- */
 function canFound(card,pile){ if(!pile||!pile.length) return card.r===1; const t=pile[pile.length-1]; return card.s===t.s&&card.r===t.r+1; }
 function canWork(cards,pile,src){ const c=cards[0]; if(!pile||!pile.length) return true; const t=pile[pile.length-1];
-  if(isRed(c.s)===isRed(t.s)) return false;                 // must be opposite color
-  if(c.r===t.r-1) return true;                              // build DOWN — any source
-  if(c.r===t.r+1 && src && (src.zone==='nerts'||src.zone==='work')) return true; // build UP — only from Nerts pile or a work-pile merge
-  return false; }
+  return c.r===t.r-1 && isRed(c.s)!==isRed(t.s); }   // build DOWN only, alternating colors
 function validRun(run){ for(let i=0;i<run.length-1;i++){ const a=run[i],b=run[i+1]; if(!(b.r===a.r-1&&isRed(a.s)!==isRed(b.s))) return false; } return true; }
 
 /* ---------- human interaction ---------- */

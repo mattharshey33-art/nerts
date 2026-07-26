@@ -9,9 +9,10 @@
     --felt:#0f5132; --felt2:#0b3d27; --gold:#f4c430;
     --card-w:52px; --card-h:74px; --radius:8px;
   }
-  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
-  body{background:radial-gradient(circle at 50% 12%,var(--felt) 0%,var(--felt2) 72%);color:#fff;overflow:hidden;user-select:none;}
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-touch-callout:none;}
+  /* touch-action:manipulation kills the double-tap-to-zoom on iOS */
+  html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;touch-action:manipulation;}
+  body{background:radial-gradient(circle at 50% 12%,var(--felt) 0%,var(--felt2) 72%);color:#fff;overflow:hidden;user-select:none;-webkit-user-select:none;touch-action:manipulation;}
   button{font-family:inherit;cursor:pointer;border:none;border-radius:10px;font-weight:700;}
   .btn{background:var(--gold);color:#3a2c00;padding:10px 16px;font-size:15px;box-shadow:0 2px 0 #b8901d;}
   .btn:active{transform:translateY(1px);box-shadow:0 1px 0 #b8901d;}
@@ -19,7 +20,14 @@
   .btn.red{background:#e63946;color:#fff;box-shadow:0 2px 0 #a51b26;}
   .hidden{display:none !important;}
   /* iOS Safari fires tap->click on non-button elements only when they're marked clickable */
-  .chip,.card,.slot,.workpile,.iconbtn,.closex,.opp,.btn,.stackwrap{cursor:pointer;touch-action:manipulation;}
+  .chip,.slot,.workpile,.iconbtn,.closex,.opp,.btn{cursor:pointer;touch-action:manipulation;}
+  /* cards use touch-action:none so custom drag works without the page scrolling/zooming */
+  .card{cursor:grab;touch-action:none;}
+  .card:active{cursor:grabbing;}
+  /* drag ghost + drop-target highlights */
+  .dragghost{position:fixed;pointer-events:none;z-index:9999;opacity:.94;transform:translate(-50%,-24%);filter:drop-shadow(0 6px 10px rgba(0,0,0,.5));}
+  .drop-ok{box-shadow:0 0 0 3px #63e6be !important;border-radius:var(--radius);}
+  .drop-no{box-shadow:0 0 0 3px #e63946 !important;border-radius:var(--radius);}
 
   .screen{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;z-index:20;overflow:auto;}
   .panel{background:rgba(0,0,0,.35);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.15);
@@ -34,7 +42,8 @@
   .chips .chip.on{border-color:#fff;transform:scale(1.03);}
 
   /* Board */
-  #game{position:absolute;inset:0;display:flex;flex-direction:column;}
+  /* centered column so it looks right on laptops, full-width on phones */
+  #game{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:660px;display:flex;flex-direction:column;box-shadow:0 0 60px rgba(0,0,0,.35);}
   .topbar{display:flex;align-items:center;gap:8px;padding:7px 10px;background:rgba(0,0,0,.28);}
   .topbar b{color:var(--gold);}
   .topbar .spacer{flex:1;}
@@ -142,7 +151,8 @@
 <!-- GAME -->
 <div id="game" class="hidden">
   <div class="topbar">
-    <div>Nerts <b id="topName">You</b></div>
+    <b id="topName" style="color:var(--gold)">You</b>
+    <span class="iconbtn" id="timer" style="pointer-events:none;padding:6px 9px;">⏱ 0:00</span>
     <div class="spacer"></div>
     <button class="iconbtn" id="scoreOpen">🏆 <span id="topScore">0</span>/<span id="topTarget">100</span></button>
     <button class="iconbtn" id="newBtn">↺ New</button>
@@ -161,7 +171,7 @@
     </div>
   </div>
 
-  <div class="hint" id="turnHint">Tap the stock to flip • tap a card then tap where it goes • double-tap to auto-play up top</div>
+  <div class="hint" id="turnHint">Tap a work pile to grab its top card • tap it again to grab more of the stack • then tap where it goes • double-tap Nerts/Waste to send a card up top</div>
   <div class="controls">
     <button class="btn ghost" id="flipBtn">🔄 Flip Stock</button>
     <button class="btn ghost" id="stuckBtn">😖 Stuck</button>
@@ -230,6 +240,7 @@ let selection=null;   // {zone,pile,index,cards}
 let botTimer=null, botNext={};
 let lastActed=null, lastActedT=0;   // for highlighting the bot that just moved
 let stuckArmed=false;               // two-tap guard for the Stuck button
+let gameStartTs=0, timerInt=null;   // game timer
 const COLORS=['#ffd43b','#74c0fc','#ff8787','#63e6be'];
 
 // setup chips
@@ -254,9 +265,13 @@ bindTap($('startBtn'),()=>{
   SLOTS=Math.max(8, players.length*4);
   $('topName').textContent=name; $('topTarget').textContent=TARGET; $('targetLabel').textContent=TARGET;
   $('setup').classList.add('hidden'); $('game').classList.remove('hidden');
-  startRound();
+  startRound(); startTimer();
   if(!botTimer) botTimer=setInterval(botTick,150);
 });
+function fmtTime(ms){ const s=Math.max(0,Math.floor(ms/1000)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+function startTimer(){ gameStartTs=Date.now(); if(timerInt) clearInterval(timerInt);
+  $('timer').textContent='⏱ 0:00'; timerInt=setInterval(()=>{ $('timer').textContent='⏱ '+fmtTime(Date.now()-gameStartTs); },500); }
+function stopTimer(){ if(timerInt){ clearInterval(timerInt); timerInt=null; } }
 
 function startRound(){
   roundSeq++; roundActive=true;
@@ -299,26 +314,26 @@ function renderFoundations(){ const wrap=$('foundations'); wrap.innerHTML='';
     if(pile&&pile.length){ el=cardEl(pile[pile.length-1]); el.classList.add('slot'); }
     else { el=emptySlot('A'); }
     if(selection&&selection.cards.length===1&&canFound(selection.cards[0],pile)){ el.classList.add('target'); }
-    bindTap(el,()=>onFoundationTap(i),{key:'f'+i}); wrap.appendChild(el); }); }
+    el.dataset.found=i; bindTap(el,()=>onFoundationTap(i),{key:'f'+i}); wrap.appendChild(el); }); }
 
 function renderHand(){ const h=ME.hand; if(!h) return;
   const sp=$('stockPile'); sp.innerHTML=''; const sEl=h.stock.length?backEl(h.stock.length):emptySlot('↻'); bindTap(sEl,flipStock,{key:'stock'}); sp.appendChild(sEl);
   const wp=$('wastePile'); wp.innerHTML='';
   if(h.waste.length){ const el=cardEl(h.waste[h.waste.length-1]); if(isSel('waste',0,h.waste.length-1))el.classList.add('sel');
-    bindTap(el,()=>selectCard('waste',0,h.waste.length-1),{key:'waste',onDouble:()=>dblAuto('waste',0)}); wp.appendChild(el); }
+    bindPlayable(el,{src:{zone:'waste'}, getCards:()=>h.waste.length?[h.waste[h.waste.length-1]]:[], tap:()=>selectCard('waste',0,h.waste.length-1), onDouble:()=>dblAuto('waste',0), key:'waste'}); wp.appendChild(el); }
   else wp.appendChild(emptySlot(''));
   const wr=$('workRow'); wr.innerHTML='';
   h.work.forEach((pile,pi)=>{ const col=document.createElement('div'); col.className='workpile'+(pile.length?'':' empty');
     if(selection&&canWork(selection.cards,pile)) col.classList.add('target');
-    const sw=document.createElement('div'); sw.className='stackwrap'; sw.style.height=(pile.length?(pile.length-1)*20+74:74)+'px';
-    pile.forEach((c,ci)=>{ const el=cardEl(c); el.classList.add('fan'); el.style.top=(ci*20)+'px';
-      if(isSel('work',pi,ci))el.classList.add('sel');
-      bindTap(el,()=>onWorkCardTap(pi,ci),{stop:true,key:'w'+pi+'_'+ci,onDouble:()=>dblAuto('work',pi,ci)}); sw.appendChild(el); });
-    col.appendChild(sw); bindTap(col,()=>onWorkTap(pi),{key:'col'+pi}); wr.appendChild(col); });
+    const OFF=26; const sw=document.createElement('div'); sw.className='stackwrap'; sw.style.height=(pile.length?(pile.length-1)*OFF+74:74)+'px';
+    pile.forEach((c,ci)=>{ const el=cardEl(c); el.classList.add('fan'); el.style.top=(ci*OFF)+'px';
+      if(selection&&selection.zone==='work'&&selection.pile===pi&&ci>=selection.index) el.classList.add('sel');
+      bindPlayable(el,{src:{zone:'work',pile:pi,index:ci}, getCards:()=>workDragCards(pi,ci), tap:()=>onWorkCardTap(pi,ci), stop:true, key:'w'+pi+'_'+ci}); sw.appendChild(el); });
+    col.dataset.work=pi; col.appendChild(sw); bindTap(col,()=>onWorkTap(pi),{key:'col'+pi}); wr.appendChild(col); });
   const np=$('nertsPile'); np.innerHTML='';
   if(h.nerts.length){ const el=cardEl(h.nerts[h.nerts.length-1]); if(isSel('nerts',0,h.nerts.length-1))el.classList.add('sel');
     const c=document.createElement('div'); c.className='pilecount'; c.textContent=h.nerts.length; el.appendChild(c);
-    bindTap(el,()=>selectCard('nerts',0,h.nerts.length-1),{key:'nerts',onDouble:()=>dblAuto('nerts',0)}); np.appendChild(el); }
+    bindPlayable(el,{src:{zone:'nerts'}, getCards:()=>h.nerts.length?[h.nerts[h.nerts.length-1]]:[], tap:()=>selectCard('nerts',0,h.nerts.length-1), onDouble:()=>dblAuto('nerts',0), key:'nerts'}); np.appendChild(el); }
   else np.appendChild(emptySlot('✓')); }
 
 function renderScore(){ const list=$('scoreList'); list.innerHTML='';
@@ -347,17 +362,30 @@ function onFoundationTap(i){ if(!selection) return; if(selection.cards.length!==
   removeFromHand(ME,selection); foundations[i]=(foundations[i]||[]); foundations[i].push({r:card.r,s:card.s,by:ME.id});
   ME.played++; ME.nertsCount=ME.hand.nerts.length; selection=null; renderAll(); checkOut(ME); }
 
-// Tapping a card inside a work pile: if you already have a card selected from
-// somewhere else, treat this as "drop it here"; otherwise select this card.
-function onWorkCardTap(pi,ci){
-  if(selection && !(selection.zone==='work' && selection.pile===pi)) onWorkTap(pi);
-  else selectCard('work',pi,ci);
+/* WORK PILE PICK-UP (mobile-friendly, no need to tap a buried card):
+   - tap a pile with nothing selected  -> grab its top card
+   - tap the SAME pile again           -> grab the next card up too (grows the run),
+                                          cycling back to 1 card once you reach the top
+   - tap a DIFFERENT pile / foundation -> drop what you're holding there            */
+function grabTop(pi){ const p=ME.hand.work[pi]; if(!p.length){ toast("That pile is empty"); return; }
+  selection={zone:'work',pile:pi,index:p.length-1,cards:[p[p.length-1]]}; renderAll(); }
+function extendRun(pi){ const p=ME.hand.work[pi]; const start=selection.index;
+  if(start>0){ const cand=p.slice(start-1);
+    if(validRun(cand)){ selection.index=start-1; selection.cards=cand; toast("Holding "+cand.length+" cards"); renderAll(); return; } }
+  grabTop(pi); toast("Back to 1 card");   // reached the top / not a run -> cycle to single
 }
-function onWorkTap(pi){ if(!selection) return; const pile=ME.hand.work[pi];
-  if(selection.zone==='work'&&selection.pile===pi){ selection=null; renderHand(); renderFoundations(); return; }
-  if(!canWork(selection.cards,pile)){ toast("Can't stack there"); return; }
+function onWorkCardTap(pi,ci){
+  if(selection && !(selection.zone==='work' && selection.pile===pi)){ onWorkTap(pi); return; } // drop from elsewhere
+  if(selection && selection.zone==='work' && selection.pile===pi){ extendRun(pi); return; }     // grab more of the run
+  grabTop(pi);
+}
+function onWorkTap(pi){
+  if(!selection){ grabTop(pi); return; }
+  if(selection.zone==='work' && selection.pile===pi){ extendRun(pi); return; }
+  const pile=ME.hand.work[pi];
+  if(!canWork(selection.cards,pile)){ toast("Can't stack there — build down in alternating colors"); return; }
   const cards=selection.cards.slice(); removeFromHand(ME,selection); ME.hand.work[pi]=ME.hand.work[pi].concat(cards);
-  ME.nertsCount=ME.hand.nerts.length; selection=null; renderAll(); checkOut(ME); }
+  ME.nertsCount=ME.hand.nerts.length; selection=null; stuckArmed=false; renderAll(); checkOut(ME); }
 
 function dblAuto(zone,pile,index){ const h=ME.hand; let card;
   if(zone==='nerts') card=h.nerts[h.nerts.length-1];
@@ -370,6 +398,51 @@ function dblAuto(zone,pile,index){ const h=ME.hand; let card;
   selection={zone,pile,index,cards:[card]}; onFoundationTap(slot); }
 
 function removeFromHand(p,sel){ if(sel.zone==='nerts') p.hand.nerts.pop(); else if(sel.zone==='waste') p.hand.waste.pop(); else p.hand.work[sel.pile].splice(sel.index); }
+
+/* ---------- drag-to-play engine (works with mouse on laptops + touch on phones) ---------- */
+const DRAG_THRESH=8; let dragGhost=null;
+function workDragCards(pi,ci){ const p=ME.hand.work[pi]; const run=p.slice(ci); if(run.length<=1) return run; return validRun(run)?run:(ci===p.length-1?[p[p.length-1]]:[]); }
+function playFoundationFrom(src,card,slot){ foundations[slot]=(foundations[slot]||[]); foundations[slot].push({r:card.r,s:card.s,by:ME.id});
+  removeFromHand(ME,src); ME.played++; ME.nertsCount=ME.hand.nerts.length; selection=null; stuckArmed=false; renderAll(); checkOut(ME); }
+function moveWorkFrom(src,cards,destPi){ removeFromHand(ME,src); ME.hand.work[destPi]=ME.hand.work[destPi].concat(cards);
+  ME.nertsCount=ME.hand.nerts.length; selection=null; stuckArmed=false; renderAll(); checkOut(ME); }
+function makeGhost(cards,x,y){ const g=document.createElement('div'); g.className='dragghost';
+  cards.forEach((c,i)=>{ const cc=cardEl(c); cc.style.position='absolute'; cc.style.left='0'; cc.style.top=(i*26)+'px'; g.appendChild(cc); });
+  g.style.left=x+'px'; g.style.top=y+'px'; document.body.appendChild(g); return g; }
+function dropTargetAt(x,y){ let el=document.elementFromPoint(x,y);
+  while(el){ if(el.dataset){ if(el.dataset.found!==undefined) return {type:'found',i:+el.dataset.found}; if(el.dataset.work!==undefined) return {type:'work',i:+el.dataset.work}; } el=el.parentElement; } return null; }
+function clearDropHi(){ document.querySelectorAll('.drop-ok,.drop-no').forEach(e=>e.classList.remove('drop-ok','drop-no')); }
+function highlightDrop(x,y,src,cards){ clearDropHi(); const t=dropTargetAt(x,y); if(!t) return; let el,ok;
+  if(t.type==='found'){ el=document.querySelector('[data-found="'+t.i+'"]'); ok=cards.length===1&&canFound(cards[0],foundations[t.i]); }
+  else { el=document.querySelector('[data-work="'+t.i+'"]'); ok=!(src.zone==='work'&&src.pile===t.i)&&canWork(cards,ME.hand.work[t.i]); }
+  if(el) el.classList.add(ok?'drop-ok':'drop-no'); }
+function resolveDrop(src,cards,x,y){ const t=dropTargetAt(x,y);
+  if(!t){ renderAll(); return; }
+  if(t.type==='found'){ if(cards.length===1&&canFound(cards[0],foundations[t.i])) playFoundationFrom(src,cards[0],t.i);
+    else { toast(cards.length>1?"Only single cards go up top":"Can't play there"); renderAll(); } }
+  else { if(src.zone==='work'&&src.pile===t.i){ renderAll(); return; }
+    if(canWork(cards,ME.hand.work[t.i])) moveWorkFrom(src,cards,t.i); else { toast("Can't stack there"); renderAll(); } } }
+function bindPlayable(el,o){ let down=false,dragging=false,x0=0,y0=0,cards=null;
+  const start=e=>{ down=true; dragging=false; const p=e.touches?e.touches[0]:e; x0=p.clientX; y0=p.clientY;
+    if(e.pointerId!==undefined&&el.setPointerCapture){ try{el.setPointerCapture(e.pointerId);}catch(_){}} };
+  const move=e=>{ if(!down) return; const p=e.touches?e.touches[0]:e;
+    if(!dragging&&(Math.abs(p.clientX-x0)>DRAG_THRESH||Math.abs(p.clientY-y0)>DRAG_THRESH)){
+      cards=o.getCards?o.getCards():null;
+      if(!cards||!cards.length){ down=false; toast("Not a movable run"); return; }
+      dragging=true; selection=null; dragGhost=makeGhost(cards,p.clientX,p.clientY); }
+    if(dragging){ if(e.cancelable)e.preventDefault(); dragGhost.style.left=p.clientX+'px'; dragGhost.style.top=p.clientY+'px'; highlightDrop(p.clientX,p.clientY,o.src,cards); } };
+  const end=e=>{ if(!down) return; down=false;
+    if(dragging){ dragging=false; const p=e.changedTouches?e.changedTouches[0]:e;
+      if(dragGhost){ dragGhost.remove(); dragGhost=null; } clearDropHi();
+      resolveDrop(o.src,cards,p.clientX,p.clientY); cards=null; return; }
+    if(o.stop&&e.stopPropagation) e.stopPropagation();
+    const now=Date.now();
+    if(o.onDouble&&_lastKey===o.key&&now-_lastT<340){ _lastKey=null;_lastT=0; o.onDouble(); return; }
+    _lastKey=o.key||null; _lastT=now; o.tap(); };
+  const cancel=()=>{ down=false; dragging=false; if(dragGhost){dragGhost.remove();dragGhost=null;} clearDropHi(); };
+  if(window.PointerEvent){ el.addEventListener('pointerdown',start); el.addEventListener('pointermove',move); el.addEventListener('pointerup',end); el.addEventListener('pointercancel',cancel); }
+  else { el.addEventListener('touchstart',start,{passive:true}); el.addEventListener('touchmove',move,{passive:false}); el.addEventListener('touchend',end); } }
+document.addEventListener('gesturestart',e=>e.preventDefault());  // block iOS pinch-zoom
 
 function flipStock(){ const h=ME.hand; stuckArmed=false; if(!h.stock.length&&!h.waste.length) return;
   if(!h.stock.length){ h.stock=h.waste.reverse(); h.waste=[]; } else { const n=Math.min(3,h.stock.length); for(let i=0;i<n;i++) h.waste.push(h.stock.pop()); }
@@ -412,8 +485,9 @@ function endRound(caller){ roundActive=false; selection=null;   // caller null =
   let body='';
   [...players].sort((a,b)=>b.total-a.total).forEach(p=>{ const s=p.lastRound>=0?'+':'';
     body+=`<div style="margin:5px 0;"><span style="color:${p.color}">●</span> <b>${p.name}${p.isBot?' 🤖':''}</b>: ${p.total} <span style="opacity:.7">(${s}${p.lastRound})</span></div>`; });
-  if(winner){ $('ovTitle').textContent='🏆 Game Over'; $('ovBig').textContent=(winner.id==='me'?'You win! 🎉':winner.name+' wins');
-    $('ovBody').innerHTML=body; $('ovBtn').textContent='Play Again'; ovAction=()=>{ players.forEach(p=>p.total=0); startRound(); }; $('ovHint').textContent=''; }
+  if(winner){ stopTimer(); $('ovTitle').textContent='🏆 Game Over'; $('ovBig').textContent=(winner.id==='me'?'You win! 🎉':winner.name+' wins');
+    $('ovBody').innerHTML=body; $('ovBtn').textContent='Play Again'; ovAction=()=>{ players.forEach(p=>p.total=0); startRound(); startTimer(); };
+    $('ovHint').textContent='Game time: '+fmtTime(Date.now()-gameStartTs); }
   else {
     if(!caller){ $('ovTitle').textContent='😖 Stuck — nobody could move'; }
     else { $('ovTitle').textContent=(caller.id==='me'?'You went out! 🎉':caller.name+' went out!'); }
@@ -438,7 +512,7 @@ function humanHasMove(){ const h=ME.hand; if(!h) return false;
 let ovAction=null;
 bindTap($('ovBtn'),()=>{ if(ovAction) ovAction(); },{key:'ovbtn'});
 bindTap($('nertsBtn'),()=>{ if(ME&&ME.hand.nerts.length===0) endRound(ME); },{key:'nertsbtn'});
-bindTap($('newBtn'),()=>{ $('game').classList.add('hidden'); $('setup').classList.remove('hidden'); clearInterval(botTimer); botTimer=null; },{key:'newbtn'});
+bindTap($('newBtn'),()=>{ $('game').classList.add('hidden'); $('setup').classList.remove('hidden'); clearInterval(botTimer); botTimer=null; stopTimer(); $('timer').textContent='⏱ 0:00'; },{key:'newbtn'});
 bindTap($('stuckBtn'),()=>{
   if(!roundActive) return;
   if(humanHasMove()){ stuckArmed=false; toast("You've still got a move — send a card up top or build a work pile."); return; }

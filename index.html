@@ -59,7 +59,7 @@
   .opphead{font-size:11px;margin-bottom:3px;display:flex;align-items:center;gap:6px;}
   .opphead .nz{background:#000;border-radius:10px;padding:0 6px;font-weight:800;font-size:10px;}
   .mini{display:flex;gap:3px;align-items:center;}
-  .minicell{width:24px;height:32px;border-radius:4px;background:#fff;color:#111;font-weight:800;font-size:11px;line-height:1;
+  .minicell{width:26px;height:34px;border-radius:4px;background:#fff;color:#000;font-weight:900;font-size:13px;line-height:1;
     display:flex;align-items:center;justify-content:center;position:relative;border:1px solid #ccc;flex:0 0 auto;}
   .minicell.red{color:#d61f2b;}
   .minicell.back{background:repeating-linear-gradient(45deg,#1e5aa8,#1e5aa8 4px,#2f74d0 4px,#2f74d0 8px);border-color:#14417a;}
@@ -82,12 +82,13 @@
   .workpile.target{box-shadow:0 0 0 3px rgba(244,196,48,.5);}
   .stackwrap{position:relative;}
 
-  .card{width:var(--card-w);height:var(--card-h);border-radius:var(--radius);background:#fff;color:#111;position:relative;
-    box-shadow:0 1px 3px rgba(0,0,0,.4);display:flex;flex-direction:column;justify-content:space-between;padding:3px 4px;font-weight:800;border:1px solid #d9d9d9;}
+  .card{width:var(--card-w);height:var(--card-h);border-radius:var(--radius);background:#fff;color:#000;position:relative;
+    box-shadow:0 1px 3px rgba(0,0,0,.4);display:flex;flex-direction:column;justify-content:space-between;padding:3px 4px;font-weight:900;border:1px solid #d9d9d9;}
   .card.red{color:#d61f2b;}
-  .card .tl{font-size:14px;line-height:1;}
-  .card .br{font-size:14px;line-height:1;align-self:flex-end;transform:rotate(180deg);}
-  .card .pip{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:24px;opacity:.9;}
+  .card .tl{font-size:15px;line-height:1.05;}
+  .card .br{font-size:15px;line-height:1.05;align-self:flex-end;transform:rotate(180deg);}
+  /* bigger, full-contrast center pip so spades ♠ and clubs ♣ are easy to read/tell apart */
+  .card .pip{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:32px;opacity:1;line-height:1;}
   .card.back{background:repeating-linear-gradient(45deg,#1e5aa8,#1e5aa8 6px,#2f74d0 6px,#2f74d0 12px);border:1px solid #14417a;}
   .card.sel{outline:3px solid var(--gold);outline-offset:1px;transform:translateY(-6px);z-index:5;}
   .fan{position:absolute;left:0;width:var(--card-w);}
@@ -316,7 +317,7 @@ function renderFoundations(){ const wrap=$('foundations'); wrap.innerHTML='';
     if(selection&&selection.cards.length===1&&canFound(selection.cards[0],pile)){ el.classList.add('target'); }
     el.dataset.found=i; bindTap(el,()=>onFoundationTap(i),{key:'f'+i}); wrap.appendChild(el); }); }
 
-function renderHand(){ const h=ME.hand; if(!h) return;
+function renderHand(){ if(isDragging) return; const h=ME.hand; if(!h) return;   // don't rebuild your hand mid-drag (would orphan the dragged card)
   const sp=$('stockPile'); sp.innerHTML=''; const sEl=h.stock.length?backEl(h.stock.length):emptySlot('↻'); bindTap(sEl,flipStock,{key:'stock'}); sp.appendChild(sEl);
   const wp=$('wastePile'); wp.innerHTML='';
   if(h.waste.length){ const el=cardEl(h.waste[h.waste.length-1]); if(isSel('waste',0,h.waste.length-1))el.classList.add('sel');
@@ -400,7 +401,7 @@ function dblAuto(zone,pile,index){ const h=ME.hand; let card;
 function removeFromHand(p,sel){ if(sel.zone==='nerts') p.hand.nerts.pop(); else if(sel.zone==='waste') p.hand.waste.pop(); else p.hand.work[sel.pile].splice(sel.index); }
 
 /* ---------- drag-to-play engine (works with mouse on laptops + touch on phones) ---------- */
-const DRAG_THRESH=8; let dragGhost=null;
+const DRAG_THRESH=8; let dragGhost=null; let isDragging=false;
 function workDragCards(pi,ci){ const p=ME.hand.work[pi]; const run=p.slice(ci); if(run.length<=1) return run; return validRun(run)?run:(ci===p.length-1?[p[p.length-1]]:[]); }
 function playFoundationFrom(src,card,slot){ foundations[slot]=(foundations[slot]||[]); foundations[slot].push({r:card.r,s:card.s,by:ME.id});
   removeFromHand(ME,src); ME.played++; ME.nertsCount=ME.hand.nerts.length; selection=null; stuckArmed=false; renderAll(); checkOut(ME); }
@@ -429,20 +430,25 @@ function bindPlayable(el,o){ let down=false,dragging=false,x0=0,y0=0,cards=null;
     if(!dragging&&(Math.abs(p.clientX-x0)>DRAG_THRESH||Math.abs(p.clientY-y0)>DRAG_THRESH)){
       cards=o.getCards?o.getCards():null;
       if(!cards||!cards.length){ down=false; toast("Not a movable run"); return; }
-      dragging=true; selection=null; dragGhost=makeGhost(cards,p.clientX,p.clientY); }
+      dragging=true; isDragging=true; selection=null; dragGhost=makeGhost(cards,p.clientX,p.clientY); }
     if(dragging){ if(e.cancelable)e.preventDefault(); dragGhost.style.left=p.clientX+'px'; dragGhost.style.top=p.clientY+'px'; highlightDrop(p.clientX,p.clientY,o.src,cards); } };
   const end=e=>{ if(!down) return; down=false;
-    if(dragging){ dragging=false; const p=e.changedTouches?e.changedTouches[0]:e;
+    if(dragging){ dragging=false; isDragging=false; const p=e.changedTouches?e.changedTouches[0]:e;
       if(dragGhost){ dragGhost.remove(); dragGhost=null; } clearDropHi();
       resolveDrop(o.src,cards,p.clientX,p.clientY); cards=null; return; }
     if(o.stop&&e.stopPropagation) e.stopPropagation();
     const now=Date.now();
     if(o.onDouble&&_lastKey===o.key&&now-_lastT<340){ _lastKey=null;_lastT=0; o.onDouble(); return; }
     _lastKey=o.key||null; _lastT=now; o.tap(); };
-  const cancel=()=>{ down=false; dragging=false; if(dragGhost){dragGhost.remove();dragGhost=null;} clearDropHi(); };
+  const cancel=()=>{ down=false; dragging=false; isDragging=false; if(dragGhost){dragGhost.remove();dragGhost=null;} clearDropHi(); renderAll(); };
   if(window.PointerEvent){ el.addEventListener('pointerdown',start); el.addEventListener('pointermove',move); el.addEventListener('pointerup',end); el.addEventListener('pointercancel',cancel); }
   else { el.addEventListener('touchstart',start,{passive:true}); el.addEventListener('touchmove',move,{passive:false}); el.addEventListener('touchend',end); } }
 document.addEventListener('gesturestart',e=>e.preventDefault());  // block iOS pinch-zoom
+// Safety net: if a drag ever gets orphaned (e.g. interrupted), clean up the floating
+// card on the next release so nothing stays frozen on the board.
+function cleanupOrphanDrag(){ if(dragGhost){ dragGhost.remove(); dragGhost=null; } isDragging=false; clearDropHi(); renderAll(); }
+window.addEventListener('pointerup', ()=>{ if(dragGhost) setTimeout(()=>{ if(dragGhost) cleanupOrphanDrag(); },30); });
+window.addEventListener('pointercancel', ()=>{ if(dragGhost) cleanupOrphanDrag(); });
 
 function flipStock(){ const h=ME.hand; stuckArmed=false; if(!h.stock.length&&!h.waste.length) return;
   if(!h.stock.length){ h.stock=h.waste.reverse(); h.waste=[]; } else { const n=Math.min(3,h.stock.length); for(let i=0;i<n;i++) h.waste.push(h.stock.pop()); }
